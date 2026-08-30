@@ -1,0 +1,1 @@
+val solve : a:float array -> b:float array -> c:float array -> d:float array -> float array

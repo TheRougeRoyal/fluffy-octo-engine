@@ -1,0 +1,230 @@
+(lang dune 3.23)
+(name pde_opt)
+(sections (lib .) (libexec .) (bin ../../bin) (doc ../../doc/pde_opt))
+(files
+ (lib
+  (META
+   api.ml
+   api.mli
+   backtesting.ml
+   backtesting.mli
+   bcs.ml
+   bcs.mli
+   bs_params.ml
+   bs_params.mli
+   calibration.ml
+   calibration.mli
+   crypto_analytics.ml
+   crypto_analytics.mli
+   crypto_model.ml
+   crypto_model.mli
+   dune-package
+   grid.ml
+   grid.mli
+   live_data.ml
+   live_data.mli
+   market_data.ml
+   market_data.mli
+   payoff.ml
+   payoff.mli
+   pde1d.ml
+   pde1d.mli
+   pde_opt.a
+   pde_opt.cma
+   pde_opt.cmi
+   pde_opt.cmt
+   pde_opt.cmx
+   pde_opt.cmxa
+   pde_opt.ml
+   pde_opt__Api.cmi
+   pde_opt__Api.cmt
+   pde_opt__Api.cmti
+   pde_opt__Api.cmx
+   pde_opt__Backtesting.cmi
+   pde_opt__Backtesting.cmt
+   pde_opt__Backtesting.cmti
+   pde_opt__Backtesting.cmx
+   pde_opt__Bcs.cmi
+   pde_opt__Bcs.cmt
+   pde_opt__Bcs.cmti
+   pde_opt__Bcs.cmx
+   pde_opt__Bs_params.cmi
+   pde_opt__Bs_params.cmt
+   pde_opt__Bs_params.cmti
+   pde_opt__Bs_params.cmx
+   pde_opt__Calibration.cmi
+   pde_opt__Calibration.cmt
+   pde_opt__Calibration.cmti
+   pde_opt__Calibration.cmx
+   pde_opt__Crypto_analytics.cmi
+   pde_opt__Crypto_analytics.cmt
+   pde_opt__Crypto_analytics.cmti
+   pde_opt__Crypto_analytics.cmx
+   pde_opt__Crypto_model.cmi
+   pde_opt__Crypto_model.cmt
+   pde_opt__Crypto_model.cmti
+   pde_opt__Crypto_model.cmx
+   pde_opt__Grid.cmi
+   pde_opt__Grid.cmt
+   pde_opt__Grid.cmti
+   pde_opt__Grid.cmx
+   pde_opt__Live_data.cmi
+   pde_opt__Live_data.cmt
+   pde_opt__Live_data.cmti
+   pde_opt__Live_data.cmx
+   pde_opt__Market_data.cmi
+   pde_opt__Market_data.cmt
+   pde_opt__Market_data.cmti
+   pde_opt__Market_data.cmx
+   pde_opt__Payoff.cmi
+   pde_opt__Payoff.cmt
+   pde_opt__Payoff.cmti
+   pde_opt__Payoff.cmx
+   pde_opt__Pde1d.cmi
+   pde_opt__Pde1d.cmt
+   pde_opt__Pde1d.cmti
+   pde_opt__Pde1d.cmx
+   pde_opt__Pricing.cmi
+   pde_opt__Pricing.cmt
+   pde_opt__Pricing.cmti
+   pde_opt__Pricing.cmx
+   pde_opt__Time_stepper.cmi
+   pde_opt__Time_stepper.cmt
+   pde_opt__Time_stepper.cmti
+   pde_opt__Time_stepper.cmx
+   pde_opt__Tridiag.cmi
+   pde_opt__Tridiag.cmt
+   pde_opt__Tridiag.cmti
+   pde_opt__Tridiag.cmx
+   pricing.ml
+   pricing.mli
+   time_stepper.ml
+   time_stepper.mli
+   tridiag.ml
+   tridiag.mli))
+ (libexec (pde_opt.cmxs))
+ (bin
+  (crypto_api_example
+   crypto_backtest
+   crypto_complete_example
+   crypto_dashboard
+   crypto_live
+   crypto_live_monitor
+   crypto_live_predict
+   crypto_predict
+   example_pricing
+   greeks_analysis
+   market_pricing
+   pde_opt
+   pricing_api))
+ (doc (README.md)))
+(library
+ (name pde_opt)
+ (kind normal)
+ (archives (byte pde_opt.cma) (native pde_opt.cmxa))
+ (plugins (byte pde_opt.cma) (native pde_opt.cmxs))
+ (native_archives pde_opt.a)
+ (requires yojson)
+ (main_module_name Pde_opt)
+ (modes byte native)
+ (modules
+  (wrapped
+   (group
+    (alias
+     (obj_name pde_opt)
+     (visibility public)
+     (kind alias)
+     (source (path Pde_opt) (impl (path pde_opt.ml-gen))))
+    (name Pde_opt)
+    (modules
+     (module
+      (obj_name pde_opt__Api)
+      (visibility public)
+      (source (path Api) (intf (path api.mli)) (impl (path api.ml))))
+     (module
+      (obj_name pde_opt__Backtesting)
+      (visibility public)
+      (source
+       (path Backtesting)
+       (intf (path backtesting.mli))
+       (impl (path backtesting.ml))))
+     (module
+      (obj_name pde_opt__Bcs)
+      (visibility public)
+      (source (path Bcs) (intf (path bcs.mli)) (impl (path bcs.ml))))
+     (module
+      (obj_name pde_opt__Bs_params)
+      (visibility public)
+      (source
+       (path Bs_params)
+       (intf (path bs_params.mli))
+       (impl (path bs_params.ml))))
+     (module
+      (obj_name pde_opt__Calibration)
+      (visibility public)
+      (source
+       (path Calibration)
+       (intf (path calibration.mli))
+       (impl (path calibration.ml))))
+     (module
+      (obj_name pde_opt__Crypto_analytics)
+      (visibility public)
+      (source
+       (path Crypto_analytics)
+       (intf (path crypto_analytics.mli))
+       (impl (path crypto_analytics.ml))))
+     (module
+      (obj_name pde_opt__Crypto_model)
+      (visibility public)
+      (source
+       (path Crypto_model)
+       (intf (path crypto_model.mli))
+       (impl (path crypto_model.ml))))
+     (module
+      (obj_name pde_opt__Grid)
+      (visibility public)
+      (source (path Grid) (intf (path grid.mli)) (impl (path grid.ml))))
+     (module
+      (obj_name pde_opt__Live_data)
+      (visibility public)
+      (source
+       (path Live_data)
+       (intf (path live_data.mli))
+       (impl (path live_data.ml))))
+     (module
+      (obj_name pde_opt__Market_data)
+      (visibility public)
+      (source
+       (path Market_data)
+       (intf (path market_data.mli))
+       (impl (path market_data.ml))))
+     (module
+      (obj_name pde_opt__Payoff)
+      (visibility public)
+      (source (path Payoff) (intf (path payoff.mli)) (impl (path payoff.ml))))
+     (module
+      (obj_name pde_opt__Pde1d)
+      (visibility public)
+      (source (path Pde1d) (intf (path pde1d.mli)) (impl (path pde1d.ml))))
+     (module
+      (obj_name pde_opt__Pricing)
+      (visibility public)
+      (source
+       (path Pricing)
+       (intf (path pricing.mli))
+       (impl (path pricing.ml))))
+     (module
+      (obj_name pde_opt__Time_stepper)
+      (visibility public)
+      (source
+       (path Time_stepper)
+       (intf (path time_stepper.mli))
+       (impl (path time_stepper.ml))))
+     (module
+      (obj_name pde_opt__Tridiag)
+      (visibility public)
+      (source
+       (path Tridiag)
+       (intf (path tridiag.mli))
+       (impl (path tridiag.ml))))))
+   (wrapped true))))
