@@ -13,4 +13,11 @@ public class TradeEntity
     public DateTime ExecutedAt { get; set; }
     public decimal CashBeforeTransaction { get; set; }
     public decimal CashAfterTransaction { get; set; }
+
+    // Quantitative Risk Metrics (The Greeks)
+    public decimal Delta { get; set; }
+    public decimal Gamma { get; set; }
+    public decimal Theta { get; set; }
+    public decimal Vega { get; set; }
+    public decimal Rho { get; set; }
 }

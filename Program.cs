@@ -53,6 +53,9 @@ class Program
                 services.AddScoped<IPortfolioSnapshotRepository, PortfolioSnapshotRepository>();
                 services.AddScoped<IPerformanceMetricsRepository, PerformanceMetricsRepository>();
 
+                // Quant Services
+                services.AddSingleton<IPdeModel, OcamlPdeBridge>();
+
                 // Persistence Service
                 services.AddScoped<IPersistenceService, PersistenceService>();
 

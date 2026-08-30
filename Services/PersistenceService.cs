@@ -6,13 +6,14 @@ using Microsoft.Extensions.Logging;
 using TradingEngine.Data.Models;
 using TradingEngine.Data.Repositories;
 using TradingEngine.Models;
+using TradingEngine.Models.Quant;
 
 namespace TradingEngine.Services;
 
 public interface IPersistenceService
 {
     Task OnTradeExecutedAsync(string orderId, string symbol, int quantity,
-        decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter);
+        decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter, Greeks greeks);
     Task SavePortfolioSnapshotAsync(decimal cash, Dictionary<string, Position> positions);
     Task CalculateAndSaveMetricsAsync();
 }
@@ -40,7 +41,7 @@ public class PersistenceService : IPersistenceService
     }
 
     public async Task OnTradeExecutedAsync(string orderId, string symbol, int quantity,
-        decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter)
+        decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter, Greeks greeks)
     {
         try
         {
@@ -53,11 +54,16 @@ public class PersistenceService : IPersistenceService
                 Side = side == OrderSide.Buy ? "Buy" : "Sell",
                 ExecutedAt = DateTime.UtcNow,
                 CashBeforeTransaction = cashBefore,
-                CashAfterTransaction = cashAfter
+                CashAfterTransaction = cashAfter,
+                Delta = greeks.Delta,
+                Gamma = greeks.Gamma,
+                Theta = greeks.Theta,
+                Vega = greeks.Vega,
+                Rho = greeks.Rho
             };
 
             await _tradeRepository.SaveTradeAsync(trade);
-            _logger.LogInformation($"Trade persisted: {orderId}");
+            _logger.LogInformation($"Trade persisted with Greeks: {orderId}");
         }
         catch (Exception ex)
         {
