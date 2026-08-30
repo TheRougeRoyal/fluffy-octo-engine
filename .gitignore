@@ -1,0 +1,5 @@
+# OCaml / Dune build output
+QuantCore/_build/
+QuantCore/*.install
+QuantCore/.merlin
+QuantCore/.ocamlformat
