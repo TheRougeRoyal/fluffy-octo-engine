@@ -1,7 +1,10 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TradingEngine.Data;
+using TradingEngine.Data.Repositories;
 using TradingEngine.Models;
 using TradingEngine.Services;
 
@@ -15,7 +18,14 @@ class Program
         Console.WriteLine();
 
         var host = CreateHostBuilder(args).Build();
-        
+
+        // Ensure database is created
+        using (var scope = host.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
+            db.Database.EnsureCreated();
+        }
+
         await host.RunAsync();
     }
 
@@ -34,10 +44,22 @@ class Program
                 services.Configure<TradingServerConfig>(
                     context.Configuration.GetSection("TradingServer"));
 
+                // Database Context
+                services.AddDbContext<TradingDbContext>(options =>
+                    options.UseSqlite("Data Source=trading.db"));
+
+                // Repositories
+                services.AddScoped<ITradeRepository, TradeRepository>();
+                services.AddScoped<IPortfolioSnapshotRepository, PortfolioSnapshotRepository>();
+                services.AddScoped<IPerformanceMetricsRepository, PerformanceMetricsRepository>();
+
+                // Persistence Service
+                services.AddScoped<IPersistenceService, PersistenceService>();
+
                 // Register services as singletons (maintain state throughout application lifetime)
                 services.AddSingleton<IMarketDataManager, MarketDataManager>();
                 services.AddSingleton<IPortfolioManager, PortfolioManager>();
-                
+
                 // Register SOLID-compliant order processing services
                 services.AddSingleton<IOrderValidator, OrderValidator>();
                 services.AddSingleton<IMatchingEngine, MatchingEngine>();

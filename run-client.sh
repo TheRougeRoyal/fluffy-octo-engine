@@ -7,7 +7,6 @@ echo ""
 echo "Make sure the server is running first!"
 echo ""
 
-# Build the project
 echo "Building test client..."
 dotnet build TestClient.csproj
 

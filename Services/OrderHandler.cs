@@ -16,17 +16,22 @@ public class OrderHandler : IOrderHandler
     private readonly IMatchingEngine _matchingEngine;
     private readonly ITradeExecutor _tradeExecutor;
     private readonly IMarketDataManager _marketDataManager;
+    private readonly IPersistenceService _persistenceService;
+    private readonly IPortfolioManager _portfolioManager;
     private readonly object _lock = new();
     private int _orderCounter = 0;
 
     public OrderHandler(
         ILogger<OrderHandler> logger,
         IPortfolioManager portfolioManager,
-        IMarketDataManager marketDataManager)
+        IMarketDataManager marketDataManager,
+        IPersistenceService persistenceService)
     {
         _logger = logger;
         _marketDataManager = marketDataManager;
-        
+        _portfolioManager = portfolioManager;
+        _persistenceService = persistenceService;
+
         // Create dependencies with concrete implementations
         _validator = new OrderValidator(marketDataManager);
         _matchingEngine = new MatchingEngine(portfolioManager);
@@ -41,13 +46,17 @@ public class OrderHandler : IOrderHandler
         IOrderValidator validator,
         IMatchingEngine matchingEngine,
         ITradeExecutor tradeExecutor,
-        IMarketDataManager marketDataManager)
+        IMarketDataManager marketDataManager,
+        IPersistenceService persistenceService,
+        IPortfolioManager portfolioManager)
     {
         _logger = logger;
         _validator = validator;
         _matchingEngine = matchingEngine;
         _tradeExecutor = tradeExecutor;
         _marketDataManager = marketDataManager;
+        _persistenceService = persistenceService;
+        _portfolioManager = portfolioManager;
     }
 
     public OrderResponse ProcessOrder(OrderRequest order)
@@ -112,11 +121,23 @@ public class OrderHandler : IOrderHandler
             // Step 4: Execute the trade
             try
             {
+                decimal cashBefore = _portfolioManager.CashBalance;
                 _tradeExecutor.ExecuteTrade(order, marketPrice);
+                decimal cashAfter = _portfolioManager.CashBalance;
 
                 _logger.LogInformation(
                     "Order {OrderId} executed successfully at ${Price:N2}",
                     orderId, marketPrice);
+
+                // Persist to database (fire and forget)
+                _ = _persistenceService.OnTradeExecutedAsync(
+                    orderId,
+                    order.Symbol,
+                    order.Quantity,
+                    marketPrice,
+                    order.Side,
+                    cashBefore,
+                    cashAfter);
 
                 return new OrderResponse
                 {
