@@ -23,7 +23,14 @@ public class OcamlPdeBridge : IPdeModel
     {
         try
         {
+            if (!File.Exists(_config.PdeBinaryPath))
+            {
+                _logger.LogError("OCaml PDE Binary not found at {Path}", _config.PdeBinaryPath);
+                return new PdeResponse(false, 0, 0, 0, new Greeks(0,0,0,0,0), "PDE Binary missing");
+            }
+
             var jsonInput = JsonSerializer.Serialize(request);
+
 
             var startInfo = new ProcessStartInfo
             {

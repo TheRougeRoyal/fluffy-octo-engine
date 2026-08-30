@@ -22,6 +22,7 @@ public class OrderHandler : IOrderHandler
     private readonly IPersistenceService _persistenceService;
     private readonly IPdeModel _pdeModel;
     private readonly IPortfolioManager _portfolioManager;
+    private readonly ILimitOrderBook _orderBook;
     private readonly object _lock = new();
     private int _orderCounter = 0;
 
@@ -30,17 +31,19 @@ public class OrderHandler : IOrderHandler
         IPortfolioManager portfolioManager,
         IMarketDataManager marketDataManager,
         IPersistenceService persistenceService,
-        IPdeModel pdeModel)
+        IPdeModel pdeModel,
+        ILimitOrderBook orderBook)
     {
         _logger = logger;
         _marketDataManager = marketDataManager;
         _portfolioManager = portfolioManager;
         _persistenceService = persistenceService;
         _pdeModel = pdeModel;
+        _orderBook = orderBook;
 
         // Create dependencies with concrete implementations
         _validator = new OrderValidator(marketDataManager);
-        _matchingEngine = new MatchingEngine(portfolioManager);
+        _matchingEngine = new MatchingEngine(portfolioManager, orderBook);
         _tradeExecutor = new TradeExecutor(new Logger<TradeExecutor>(new LoggerFactory()), portfolioManager);
     }
 
@@ -55,7 +58,8 @@ public class OrderHandler : IOrderHandler
         IMarketDataManager marketDataManager,
         IPersistenceService persistenceService,
         IPdeModel pdeModel,
-        IPortfolioManager portfolioManager)
+        IPortfolioManager portfolioManager,
+        ILimitOrderBook orderBook)
     {
         _logger = logger;
         _validator = validator;
@@ -65,6 +69,7 @@ public class OrderHandler : IOrderHandler
         _persistenceService = persistenceService;
         _pdeModel = pdeModel;
         _portfolioManager = portfolioManager;
+        _orderBook = orderBook;
     }
 
     public OrderResponse ProcessOrder(OrderRequest order)

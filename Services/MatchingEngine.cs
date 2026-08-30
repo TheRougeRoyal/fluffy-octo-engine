@@ -10,14 +10,25 @@ namespace TradingEngine.Services;
 public class MatchingEngine : IMatchingEngine
 {
     private readonly IPortfolioManager _portfolioManager;
+    private readonly ILimitOrderBook _orderBook;
 
-    public MatchingEngine(IPortfolioManager portfolioManager)
+    public MatchingEngine(IPortfolioManager portfolioManager, ILimitOrderBook orderBook)
     {
         _portfolioManager = portfolioManager;
+        _orderBook = orderBook;
     }
 
     public (bool IsMatched, string Reason) TryMatch(OrderRequest order, decimal marketPrice)
     {
+        // First, try to match against the order book
+        if (_orderBook.TryMatch(order, out decimal fillPrice, out int fillQuantity))
+        {
+            // For a simple engine, we just match the first available quantity
+            // In a full engine, we'd handle partial fills
+            return (true, "Matched against order book");
+        }
+
+        // Fallback to market price matching for Market orders or marketable Limit orders
         if (order.Side == OrderSide.Buy)
         {
             return MatchBuyOrder(order, marketPrice);

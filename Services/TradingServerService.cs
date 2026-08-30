@@ -83,10 +83,19 @@ public class TradingServerService : BackgroundService
             using (var writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true })
             {
                 // Send welcome message
-                await writer.WriteLineAsync("Trading Server Ready. Send JSON order requests.");
-                
+                await writer.WriteLineAsync("Trading Server Ready. Please send your API Key first.");
+
+                // Simple Auth Check
+                string? apiKey = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(apiKey) || apiKey != "SECRET_API_KEY")
+                {
+                    await writer.WriteLineAsync("Authentication failed. Connection closing.");
+                    return;
+                }
+                await writer.WriteLineAsync("Authenticated. You can now send JSON order requests.");
+
                 string? line;
-                while (!cancellationToken.IsCancellationRequested && 
+                while (!cancellationToken.IsCancellationRequested &&
                        (line = await reader.ReadLineAsync()) != null)
                 {
                     if (string.IsNullOrWhiteSpace(line))
