@@ -1,7 +1,11 @@
 # Build Stage
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 RUN apt-get update && apt-get install -y opam dune
-RUN opam init --disable-sandboxing && opam install dune
+
+# Init opam and install dune non-interactively
+RUN opam init --disable-sandboxing && \
+    eval $(opam env) && \
+    opam install -y dune
 
 WORKDIR /app
 COPY . .
