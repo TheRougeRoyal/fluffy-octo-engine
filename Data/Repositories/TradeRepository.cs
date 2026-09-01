@@ -53,6 +53,11 @@ public class TradeRepository : ITradeRepository
         return await _context.Trades.CountAsync();
     }
 
+    public async Task<bool> TradeExistsAsync(string orderId)
+    {
+        return await _context.Trades.AnyAsync(t => t.OrderId == orderId);
+    }
+
     public async Task<decimal> CalculateTotalVolumeAsync(DateTime from, DateTime to)
     {
         return await _context.Trades

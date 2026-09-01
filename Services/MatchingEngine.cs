@@ -20,23 +20,22 @@ public class MatchingEngine : IMatchingEngine
 
     public (bool IsMatched, string Reason) TryMatch(OrderRequest order, decimal marketPrice)
     {
-        // First, try to match against the order book
-        if (_orderBook.TryMatch(order, out decimal fillPrice, out int fillQuantity))
+        // We've moved the LOB matching logic to the OrderHandler to support iterative fills
+        // But we still support market price matching for Market orders here.
+
+        if (order.OrderType == OrderType.Market)
         {
-            // For a simple engine, we just match the first available quantity
-            // In a full engine, we'd handle partial fills
-            return (true, "Matched against order book");
+            if (order.Side == OrderSide.Buy)
+            {
+                return MatchBuyOrder(order, marketPrice);
+            }
+            else
+            {
+                return MatchSellOrder(order, marketPrice);
+            }
         }
 
-        // Fallback to market price matching for Market orders or marketable Limit orders
-        if (order.Side == OrderSide.Buy)
-        {
-            return MatchBuyOrder(order, marketPrice);
-        }
-        else
-        {
-            return MatchSellOrder(order, marketPrice);
-        }
+        return (false, "Use OrderBook for Limit orders");
     }
 
     private (bool IsMatched, string Reason) MatchBuyOrder(OrderRequest order, decimal marketPrice)
@@ -45,13 +44,6 @@ public class MatchingEngine : IMatchingEngine
         if (order.Price < marketPrice)
         {
             return (false, $"Buy order price ${order.Price:N2} is below market price ${marketPrice:N2}");
-        }
-
-        // Check if sufficient cash
-        var requiredCash = order.Quantity * marketPrice;
-        if (!_portfolioManager.HasSufficientCash(requiredCash))
-        {
-            return (false, $"Insufficient cash. Required: ${requiredCash:N2}, Available: ${_portfolioManager.GetBuyingPower():N2}");
         }
 
         return (true, "Match successful");
@@ -63,15 +55,6 @@ public class MatchingEngine : IMatchingEngine
         if (order.Price > marketPrice)
         {
             return (false, $"Sell order price ${order.Price:N2} is above market price ${marketPrice:N2}");
-        }
-
-        // Check if sufficient shares
-        if (!_portfolioManager.HasSufficientShares(order.Symbol, order.Quantity))
-        {
-            var currentPosition = _portfolioManager.Positions.ContainsKey(order.Symbol) 
-                ? _portfolioManager.Positions[order.Symbol].Quantity 
-                : 0;
-            return (false, $"Insufficient shares. Required: {order.Quantity}, Available: {currentPosition}");
         }
 
         return (true, "Match successful");

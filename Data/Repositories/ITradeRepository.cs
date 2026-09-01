@@ -13,4 +13,5 @@ public interface ITradeRepository
     Task<IEnumerable<TradeEntity>> GetTradesBySymbolAsync(string symbol);
     Task<int> GetTradeCountAsync();
     Task<decimal> CalculateTotalVolumeAsync(DateTime from, DateTime to);
+    Task<bool> TradeExistsAsync(string orderId);
 }

@@ -311,8 +311,6 @@ public class ConcurrencyTests
             responses1[i].ExecutedPrice.Should().Be(responses2[i].ExecutedPrice);
         }
     }
-}
-
 
     [Fact]
     public void ConcurrentPriceFetches_NoDeadlock()

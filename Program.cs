@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,6 +6,7 @@ using TradingEngine.Data;
 using TradingEngine.Data.Repositories;
 using TradingEngine.Models;
 using TradingEngine.Services;
+using TradingEngine.Services.Quant;
 
 namespace TradingEngine;
 
@@ -14,71 +14,69 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        Console.WriteLine("Starting Trading Engine...");
-        Console.WriteLine();
+        var builder = WebApplication.CreateBuilder(args);
 
-        var host = CreateHostBuilder(args).Build();
+        // Bind configuration
+        builder.Services.Configure<TradingServerConfig>(
+            builder.Configuration.GetSection("TradingServer"));
 
-        // Ensure database is created
-        using (var scope = host.Services.CreateScope())
+        // Database Context
+        builder.Services.AddDbContext<TradingDbContext>(options =>
+            options.UseSqlite("Data Source=/data/trading.db"));
+
+        // Repositories
+        builder.Services.AddScoped<ITradeRepository, TradeRepository>();
+        builder.Services.AddScoped<IPortfolioSnapshotRepository, PortfolioSnapshotRepository>();
+        builder.Services.AddScoped<IPerformanceMetricsRepository, PerformanceMetricsRepository>();
+
+        // Risk Management
+        builder.Services.AddSingleton<IRiskManagementService, RiskManagementService>();
+
+        // Quant Services
+        builder.Services.AddSingleton<IPdeModel, OcamlPdeBridge>();
+
+        // Persistence Service
+        builder.Services.AddScoped<IPersistenceService, PersistenceService>();
+
+        // Register services as singletons
+        builder.Services.AddSingleton<IMarketDataManager, MarketDataManager>();
+        builder.Services.AddSingleton<IPortfolioManager, PortfolioManager>();
+
+        // Register order processing services
+        builder.Services.AddSingleton<IOrderValidator, OrderValidator>();
+        builder.Services.AddSingleton<IMatchingEngine, MatchingEngine>();
+        builder.Services.AddSingleton<ITradeExecutor, TradeExecutor>();
+        builder.Services.AddSingleton<IOrderHandler, OrderHandler>();
+
+        // WebSocket Handler
+        builder.Services.AddScoped<WebSocketOrderHandler>();
+
+        var app = builder.Build();
+
+        // Ensure DB is created
+        using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
             db.Database.EnsureCreated();
         }
 
-        await host.RunAsync();
+        app.UseWebSockets();
+
+        app.Map("/ws", async context =>
+        {
+            if (context.WebSockets.IsWebSocketRequest)
+            {
+                using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                var handler = context.RequestServices.GetRequiredService<WebSocketOrderHandler>();
+                await handler.HandleAsync(webSocket, context.RequestServices);
+            }
+            else
+            {
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsync("Expected WebSocket request.");
+            }
+        });
+
+        await app.RunAsync();
     }
-
-    static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-            .ConfigureAppConfiguration((context, config) =>
-            {
-                config.SetBasePath(Directory.GetCurrentDirectory());
-                config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
-                config.AddEnvironmentVariables();
-                config.AddCommandLine(args);
-            })
-            .ConfigureServices((context, services) =>
-            {
-                // Bind configuration
-                services.Configure<TradingServerConfig>(
-                    context.Configuration.GetSection("TradingServer"));
-
-                // Database Context
-                services.AddDbContext<TradingDbContext>(options =>
-                    options.UseSqlite("Data Source=trading.db"));
-
-                // Repositories
-                services.AddScoped<ITradeRepository, TradeRepository>();
-                services.AddScoped<IPortfolioSnapshotRepository, PortfolioSnapshotRepository>();
-                services.AddScoped<IPerformanceMetricsRepository, PerformanceMetricsRepository>();
-
-                // Quant Services
-                services.AddSingleton<IPdeModel, OcamlPdeBridge>();
-
-                // Persistence Service
-                services.AddScoped<IPersistenceService, PersistenceService>();
-
-                // Register services as singletons (maintain state throughout application lifetime)
-                services.AddSingleton<IMarketDataManager, MarketDataManager>();
-                services.AddSingleton<IPortfolioManager, PortfolioManager>();
-
-                // Register SOLID-compliant order processing services
-                services.AddSingleton<IOrderValidator, OrderValidator>();
-                services.AddSingleton<IMatchingEngine, MatchingEngine>();
-                services.AddSingleton<ITradeExecutor, TradeExecutor>();
-                services.AddSingleton<IOrderHandler, OrderHandler>();
-
-                // Register the hosted service
-                services.AddHostedService<TradingServerService>();
-            })
-            .ConfigureLogging((context, logging) =>
-            {
-                logging.ClearProviders();
-                logging.AddConsole();
-                logging.AddDebug();
-                
-                // Set log levels from configuration
-                logging.AddConfiguration(context.Configuration.GetSection("Logging"));
-            });
 }

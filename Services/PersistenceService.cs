@@ -16,6 +16,7 @@ public interface IPersistenceService
         decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter, Greeks greeks);
     Task SavePortfolioSnapshotAsync(decimal cash, Dictionary<string, Position> positions);
     Task CalculateAndSaveMetricsAsync();
+    Task<bool> TradeExistsAsync(string orderId);
 }
 
 public class PersistenceService : IPersistenceService
