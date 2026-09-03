@@ -3,3 +3,18 @@ QuantCore/_build/
 QuantCore/*.install
 QuantCore/.merlin
 QuantCore/.ocamlformat
+QuantCore/.ocamlbin
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.useroscs
+*.sln.docstates
+
+# Node
+node_modules/
+dist/
+.vercel
+.next
