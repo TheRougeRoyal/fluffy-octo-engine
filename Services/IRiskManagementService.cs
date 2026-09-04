@@ -1,3 +1,4 @@
+using TradingEngine.DTOs;
 using TradingEngine.Models;
 
 namespace TradingEngine.Services;

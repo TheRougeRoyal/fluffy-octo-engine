@@ -1,11 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace TradingEngine.Models.Quant;
 
 public record PdeRequest(
-    double Spot,
-    double Strike,
-    double Maturity,
-    double Rate,
-    double Volatility,
-    string OptionType,
-    string Scheme = "CN"
+    [property: JsonPropertyName("spot")] double Spot,
+    [property: JsonPropertyName("strike")] double Strike,
+    [property: JsonPropertyName("maturity")] double Maturity,
+    [property: JsonPropertyName("rate")] double Rate,
+    [property: JsonPropertyName("volatility")] double Volatility,
+    [property: JsonPropertyName("optionType")] string OptionType,
+    [property: JsonPropertyName("scheme")] string Scheme = "CN"
 );

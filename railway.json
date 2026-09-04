@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "dotnet TradingEngine.dll",
-    "healthCheckPath": "/ws",
+    "healthCheckPath": "/health",
     "restartPolicyType": "ALWAYS"
   }
 }

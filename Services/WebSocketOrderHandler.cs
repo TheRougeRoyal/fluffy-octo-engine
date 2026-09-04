@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
+using FirebaseAdmin.Auth;
 using Newtonsoft.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ public class WebSocketOrderHandler
     private readonly IOrderHandler _orderHandler;
     private readonly IMarketDataManager _marketDataManager;
     private readonly TradingServerConfig _config;
+    private readonly IFirebaseAuthenticationService? _firebaseAuthentication;
 
     public WebSocketOrderHandler(
         ILogger<WebSocketOrderHandler> logger,
@@ -27,19 +29,38 @@ public class WebSocketOrderHandler
         _config = config.Value;
     }
 
+    public WebSocketOrderHandler(
+        ILogger<WebSocketOrderHandler> logger,
+        IOrderHandler orderHandler,
+        IMarketDataManager marketDataManager,
+        IOptions<TradingServerConfig> config,
+        IEnumerable<IFirebaseAuthenticationService> firebaseAuthentication)
+        : this(logger, orderHandler, marketDataManager, config)
+    {
+        _firebaseAuthentication = firebaseAuthentication.FirstOrDefault();
+        _logger.LogInformation(
+            "Firebase WebSocket authentication is {Status}.",
+            _firebaseAuthentication is null ? "disabled" : "enabled");
+        if (_firebaseAuthentication is null)
+        {
+            _logger.LogWarning("Firebase authentication service is unavailable; legacy API-key authentication is active.");
+        }
+    }
+
     public async Task HandleAsync(WebSocket webSocket, IServiceProvider services)
     {
-        var clientEndpoint = webSocket.RemoteEndPoint?.ToString() ?? "Unknown";
+        var clientEndpoint = "WebSocket client";
         _logger.LogInformation("Client connected via WebSocket: {Endpoint}", clientEndpoint);
 
         try
         {
             // 1. Send welcome message
-            await SendTextAsync(webSocket, "Trading Server Ready. Please send your API Key first.");
+            await SendTextAsync(webSocket, "Trading Server Ready. Please send your Firebase ID token first.");
 
             // 2. Simple Auth Check
-            string apiKey = await ReceiveTextAsync(webSocket);
-            if (string.IsNullOrWhiteSpace(apiKey) || apiKey != "SECRET_API_KEY")
+            string credential = await ReceiveTextAsync(webSocket);
+            var clientId = await AuthenticateAsync(credential);
+            if (clientId is null)
             {
                 await SendTextAsync(webSocket, "Authentication failed. Connection closing.");
                 return;
@@ -63,6 +84,7 @@ public class WebSocketOrderHandler
                         continue;
                     }
 
+                    orderRequest.ClientId = clientId;
                     var response = _orderHandler.ProcessOrder(orderRequest);
                     await SendTextAsync(webSocket, JsonConvert.SerializeObject(response));
                     _logger.LogInformation("Response sent to {Endpoint}", clientEndpoint);
@@ -84,11 +106,42 @@ public class WebSocketOrderHandler
         finally
         {
             _logger.LogInformation("Client disconnected: {Endpoint}", clientEndpoint);
-            if (webSocket.State != WebSocketState.Aborted)
+            if (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
             {
-                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                try
+                {
+                    await webSocket.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Closing",
+                        CancellationToken.None);
+                }
+                catch (WebSocketException)
+                {
+                    _logger.LogDebug("WebSocket was already closed by the client.");
+                }
             }
         }
+    }
+
+    private async Task<string?> AuthenticateAsync(string credential)
+    {
+        if (_firebaseAuthentication is not null)
+        {
+            try
+            {
+                var token = await _firebaseAuthentication.VerifyIdTokenAsync(credential);
+                return token.Uid;
+            }
+            catch (FirebaseAuthException ex)
+            {
+                _logger.LogWarning(
+                    "Firebase WebSocket authentication failed: {ErrorCode} - {Message}",
+                    ex.ErrorCode, ex.Message);
+                return null;
+            }
+        }
+
+        return credential == "SECRET_API_KEY" ? "legacy-client" : null;
     }
 
     private async Task SendTextAsync(WebSocket socket, string message)

@@ -117,4 +117,7 @@ public class PersistenceService : IPersistenceService
             throw;
         }
     }
+
+    public Task<bool> TradeExistsAsync(string orderId) =>
+        _tradeRepository.TradeExistsAsync(orderId);
 }

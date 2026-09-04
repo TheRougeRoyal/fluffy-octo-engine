@@ -57,7 +57,7 @@ let () =
       ("success", `Bool true);
       ("pdePrice", `Float result.Pricing.price);
       ("analyticPrice", `Float result.Pricing.analytic_price);
-      ("error", `Float (result.Pricing.error /. result.Pricing.analytic_price *. 100.0));
+      ("relativeError", `Float (result.Pricing.error /. result.Pricing.analytic_price *. 100.0));
       ("greeks", `Assoc [
         ("delta", `Float result.Pricing.delta);
         ("gamma", `Float result.Pricing.gamma);
