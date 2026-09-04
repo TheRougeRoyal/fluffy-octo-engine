@@ -88,7 +88,7 @@ body {
   font-weight: 800;
   display: grid;
   place-items: center;
-  border-radius: 4px;
+  border-radius: 8px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
 }
@@ -103,7 +103,7 @@ body {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 4px;
+  border-radius: 8px;
   color: var(--text-muted);
   background: transparent;
   border: none;
@@ -155,7 +155,7 @@ body {
 .hero-card {
   background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-deep) 100%);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 16px;
   padding: 40px;
   display: grid;
   grid-template-columns: 1fr auto;
@@ -198,7 +198,7 @@ body {
 .metric-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 16px;
   padding: 20px;
   display: grid;
   gap: 8px;
@@ -235,7 +235,7 @@ body {
   display: flex;
   gap: 12px;
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
   border-left: 3px solid var(--border-color);
 }
@@ -247,7 +247,7 @@ body {
   width: 100%;
   overflow-x: auto;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 16px;
 }
 
 table {
@@ -288,7 +288,7 @@ td {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   padding: 40px;
-  border-radius: 12px;
+  border-radius: 24px;
   width: min(100%, 440px);
   box-shadow: 0 30px 60px rgba(0,0,0,0.5);
 }

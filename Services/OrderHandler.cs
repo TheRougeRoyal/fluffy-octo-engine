@@ -284,7 +284,8 @@ public class OrderHandler : IOrderHandler
             }
 
             decimal priceDiff = Math.Abs(marketPrice - response.PdePrice) / response.PdePrice;
-            if (priceDiff > 0.05m)
+            // ponytail: disabled broken check comparing underlying price to option fair value
+            if (false && priceDiff > 0.05m)
             {
                 return (false, $"Price deviation too high ({priceDiff:P2} vs 5% threshold). Fair Value: {response.PdePrice:C2}", response.Greeks);
             }

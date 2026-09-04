@@ -87,7 +87,7 @@ const pageMeta: Record<Page, { label: string; icon: typeof LayoutDashboard }> = 
 const defaultOrder = {
   symbol: 'AAPL',
   quantity: 1,
-  price: 50000,
+  price: 175.5,
   side: 'Buy' as OrderSide,
   type: 'Limit' as OrderType,
   tif: 'GTC' as TimeInForce,
@@ -119,7 +119,7 @@ export default function App() {
   const [order, setOrder] = useState(defaultOrder);
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [livePrice, setLivePrice] = useState(50000);
+  const [livePrice, setLivePrice] = useState(175.5);
   const [notice, setNotice] = useState('');
 
   const addActivity = async (message: string, type = 'info', response?: OrderResponse) => {
@@ -362,7 +362,7 @@ function Overview({ user, status, orders, activity, livePrice, onConnect, onTrad
       </div>
       <div className="hero-orb">
         <TrendingUp className="h-6 w-6" style={{ color: 'var(--accent-cyan)' }} />
-        <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: '8px' }}>BTCUSD / Mark</span>
+        <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: '8px' }}>AAPL / Mark</span>
         <strong style={{ fontSize: '24px', color: 'white', margin: '4px 0', fontFamily: 'JetBrains Mono' }}>{formatMoney(livePrice)}</strong>
         <small style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Live Simulated Feed</small>
       </div>
@@ -412,7 +412,7 @@ function TradePanel({ order, setOrder, estimatedValue, livePrice, onSubmit, conn
         <h2 style={{ fontSize: '28px', fontWeight: '800', letterSpacing: '-0.04em' }}>Execution Ticket</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>High-frequency order routing via Railway gateway.</p>
       </div>
-      <Badge variant={connected ? 'default' : 'secondary'} style={{ backgroundColor: connected ? 'rgba(0, 255, 148, 0.1)', color: connected ? 'var(--accent-green)' : 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
+      <Badge variant={connected ? 'default' : 'secondary'} style={{ backgroundColor: connected ? 'rgba(0, 255, 148, 0.1)' : 'transparent', color: connected ? 'var(--accent-green)' : 'var(--text-muted)', border: '1px solid var(--border-color)' }}>
         {connected ? 'Gateway Ready' : 'Offline'}
       </Badge>
     </div>
@@ -423,8 +423,8 @@ function TradePanel({ order, setOrder, estimatedValue, livePrice, onSubmit, conn
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="side-toggle" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            <Button variant={order.side === 'Buy' ? 'primary' : 'outline'} onClick={() => setOrder({ ...order, side: 'Buy' })} style={{ backgroundColor: order.side === 'Buy' ? 'var(--accent-cyan)', color: 'var(--bg-deep)', fontWeight: '700' }}>Buy</Button>
-            <Button variant={order.side === 'Sell' ? 'destructive' : 'outline'} onClick={() => setOrder({ ...order, side: 'Sell' })} style={{ backgroundColor: order.side === 'Sell' ? 'var(--accent-red)', color: 'white', fontWeight: '700' }}>Sell</Button>
+            <Button variant={order.side === 'Buy' ? 'primary' : 'outline'} onClick={() => setOrder({ ...order, side: 'Buy' })} style={{ backgroundColor: order.side === 'Buy' ? 'var(--accent-cyan)' : 'transparent', color: 'var(--bg-deep)', fontWeight: '700' }}>Buy</Button>
+            <Button variant={order.side === 'Sell' ? 'destructive' : 'outline'} onClick={() => setOrder({ ...order, side: 'Sell' })} style={{ backgroundColor: order.side === 'Sell' ? 'var(--accent-red)' : 'transparent', color: 'white', fontWeight: '700' }}>Sell</Button>
           </div>
           <label className="mono">SYMBOL<Input value={order.symbol} onChange={(event) => setOrder({ ...order, symbol: event.target.value })} className="mono" style={{ backgroundColor: 'var(--bg-deep)', color: 'white', border: '1px solid var(--border-color)' }} /></label>
           <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -536,7 +536,7 @@ function PortfolioPanel({ livePrice, setLivePrice, orders }: { livePrice: number
     </div>
     <div className="metric-grid">
       <Metric label="Cash Balance" value="$100,000.00" detail="Simulated Starting Capital" icon={CircleDollarSign} />
-      <Metric label="BTCUSD Mark" value={formatMoney(livePrice)} detail="Market Data Feed" icon={TrendingUp} />
+      <Metric label="AAPL Mark" value={formatMoney(livePrice)} detail="Market Data Feed" icon={TrendingUp} />
       <Metric label="Filled Orders" value={String(orders.filter((item) => item.Status !== 'Rejected').length)} detail="Session Executions" icon={BarChart3} />
     </div>
     <Card style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
@@ -549,7 +549,7 @@ function PortfolioPanel({ livePrice, setLivePrice, orders }: { livePrice: number
           Adjust the simulated mark price to test UI responsiveness and trade triggers.
         </p>
         <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end' }}>
-          <label className="mono">BTCUSD PRICE<Input type="number" value={livePrice} onChange={(event) => setLivePrice(Number(event.target.value))} className="mono" style={{ backgroundColor: 'var(--bg-deep)', color: 'white', border: '1px solid var(--border-color)' }} /></label>
+          <label className="mono">AAPL PRICE<Input type="number" value={livePrice} onChange={(event) => setLivePrice(Number(event.target.value))} className="mono" style={{ backgroundColor: 'var(--bg-deep)', color: 'white', border: '1px solid var(--border-color)' }} /></label>
           <div className="feed-status" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-green)', fontSize: '12px', fontFamily: 'JetBrains Mono' }}>
             <span className="status-dot status-dot-live" />
             FEED ACTIVE
