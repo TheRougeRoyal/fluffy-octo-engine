@@ -57,12 +57,25 @@ public class WebSocketOrderHandler
             // 1. Send welcome message
             await SendTextAsync(webSocket, "Trading Server Ready. Please send your Firebase ID token first.");
 
-            // 2. Simple Auth Check
-            string credential = await ReceiveTextAsync(webSocket);
+            // 2. Auth check — enforce a deadline so idle/non-authenticating clients can't hold connections open
+            using var authTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            string credential;
+            try
+            {
+                credential = await ReceiveTextAsync(webSocket, authTimeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("WebSocket auth timed out for {Endpoint}", clientEndpoint);
+                await CloseAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "Authentication timeout.");
+                return;
+            }
+
             var clientId = await AuthenticateAsync(credential);
             if (clientId is null)
             {
                 await SendTextAsync(webSocket, "Authentication failed. Connection closing.");
+                await CloseAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "Authentication failed.");
                 return;
             }
             await SendTextAsync(webSocket, "Authenticated. You can now send JSON order requests.");
@@ -70,7 +83,7 @@ public class WebSocketOrderHandler
             // 3. Main loop
             while (webSocket.State == WebSocketState.Open)
             {
-                string line = await ReceiveTextAsync(webSocket);
+                string line = await ReceiveTextAsync(webSocket, CancellationToken.None);
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
                 _logger.LogInformation("Received from {Endpoint}: {Data}", clientEndpoint, line);
@@ -141,7 +154,29 @@ public class WebSocketOrderHandler
             }
         }
 
-        return credential == "SECRET_API_KEY" ? "legacy-client" : null;
+        // Fallback: API key from config. If no key is configured, all connections are rejected.
+        if (string.IsNullOrWhiteSpace(_config.ApiKey))
+        {
+            _logger.LogWarning("No Firebase auth and no ApiKey configured — rejecting connection.");
+            return null;
+        }
+
+        return credential == _config.ApiKey ? "api-key-client" : null;
+    }
+
+    private async Task CloseAsync(WebSocket socket, WebSocketCloseStatus status, string description)
+    {
+        if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+        {
+            try
+            {
+                await socket.CloseAsync(status, description, CancellationToken.None);
+            }
+            catch (WebSocketException)
+            {
+                _logger.LogDebug("WebSocket was already closed by the client.");
+            }
+        }
     }
 
     private async Task SendTextAsync(WebSocket socket, string message)
@@ -150,10 +185,10 @@ public class WebSocketOrderHandler
         await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
     }
 
-    private async Task<string> ReceiveTextAsync(WebSocket socket)
+    private async Task<string> ReceiveTextAsync(WebSocket socket, CancellationToken cancellationToken)
     {
         var buffer = new byte[1024 * 4];
-        var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+        var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
 
         if (result.MessageType == WebSocketMessageType.Close)
         {

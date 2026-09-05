@@ -9,6 +9,7 @@ public interface ILimitOrderBook
     void AddOrder(OrderRequest order);
     decimal GetBestBid(string symbol);
     decimal GetBestAsk(string symbol);
+    [Obsolete("Use MatchIteratively instead. This method only peeks at a single fill and does not reflect actual matching behavior.")]
     bool TryMatch(OrderRequest order, out decimal fillPrice, out int fillQuantity);
 
     /// <summary>

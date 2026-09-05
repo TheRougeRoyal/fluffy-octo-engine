@@ -61,7 +61,11 @@ class Program
         // Persistence Service
         builder.Services.AddScoped<IPersistenceService, PersistenceService>();
 
-        // Register services as singletons
+        // Register services as singletons.
+        // Single-instance by design: the order book and portfolio state are held in memory for
+        // low-latency simulation. Horizontal scaling is not supported — a restart reloads state
+        // from Postgres. This is an intentional tradeoff for a sim engine; a production system
+        // would externalise book state (e.g. Redis) to allow multiple instances.
         builder.Services.AddSingleton<IMarketDataProvider, SimulatedMarketDataProvider>();
         builder.Services.AddSingleton<IMarketDataManager, MarketDataManager>();
         builder.Services.AddSingleton<IPortfolioManager, PortfolioManager>();
@@ -78,11 +82,12 @@ class Program
 
         var app = builder.Build();
 
-        // Ensure DB is created
+        // Apply any pending migrations on startup. Safe to call when schema is already current.
+        // To create a new migration after model changes: dotnet ef migrations add <Name>
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
-            db.Database.EnsureCreated();
+            await db.Database.MigrateAsync();
         }
 
         app.UseWebSockets();

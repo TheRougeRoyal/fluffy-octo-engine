@@ -9,20 +9,18 @@ public class RiskManagementService : IRiskManagementService
 {
     private readonly ILogger<RiskManagementService> _logger;
     private readonly IPortfolioManager _portfolioManager;
+    private readonly IMarketDataManager _marketDataManager;
     private readonly TradingServerConfig _config;
-
-    // ponytail: simple constants; move to config if dynamic tuning is needed
-    private const decimal MaxOrderValue = 1_000_000m;
-    private const decimal MaxPositionValue = 10_000_000m;
-    private const decimal MaxPortfolioExposure = 50_000_000m;
 
     public RiskManagementService(
         ILogger<RiskManagementService> logger,
         IPortfolioManager portfolioManager,
+        IMarketDataManager marketDataManager,
         IOptions<TradingServerConfig> config)
     {
         _logger = logger;
         _portfolioManager = portfolioManager;
+        _marketDataManager = marketDataManager;
         _config = config.Value;
     }
 
@@ -31,9 +29,9 @@ public class RiskManagementService : IRiskManagementService
         var orderValue = order.Quantity * marketPrice;
 
         // 1. Max Order Size
-        if (orderValue > MaxOrderValue)
+        if (orderValue > _config.MaxOrderValue)
         {
-            return (false, $"Order value ${orderValue:N2} exceeds maximum allowed order size ${MaxOrderValue:N2}");
+            return (false, $"Order value ${orderValue:N2} exceeds maximum allowed order size ${_config.MaxOrderValue:N2}");
         }
 
         if (order.Side == OrderSide.Buy)
@@ -55,15 +53,15 @@ public class RiskManagementService : IRiskManagementService
 
         // 4. Max Position Size
         var currentPositionValue = GetCurrentPositionValue(order.Symbol, marketPrice);
-        if (currentPositionValue + orderValue > MaxPositionValue)
+        if (currentPositionValue + orderValue > _config.MaxPositionValue)
         {
-            return (false, $"Order would exceed maximum position size for {order.Symbol} (${MaxPositionValue:N2})");
+            return (false, $"Order would exceed maximum position size for {order.Symbol} (${_config.MaxPositionValue:N2})");
         }
 
         // 5. Max Portfolio Exposure
-        if (GetTotalPortfolioValue(marketPrice) + orderValue > MaxPortfolioExposure)
+        if (GetTotalPortfolioValue() + orderValue > _config.MaxPortfolioExposure)
         {
-            return (false, $"Order would exceed maximum total portfolio exposure (${MaxPortfolioExposure:N2})");
+            return (false, $"Order would exceed maximum total portfolio exposure (${_config.MaxPortfolioExposure:N2})");
         }
 
         return (true, string.Empty);
@@ -78,10 +76,23 @@ public class RiskManagementService : IRiskManagementService
             : 0;
     }
 
-    private decimal GetTotalPortfolioValue(decimal currentMarketPrice)
+    private decimal GetTotalPortfolioValue()
     {
-        // ponytail: simplified; uses a single market price for all assets for exposure check
-        // In production, this would sum (position.Quantity * currentPrice[symbol])
-        return _portfolioManager.Positions.Values.Sum(p => p.Quantity * currentMarketPrice);
+        // Fetch current prices for all positions and compute total portfolio value
+        decimal totalValue = 0m;
+        foreach (var position in _portfolioManager.Positions.Values)
+        {
+            try
+            {
+                var price = _marketDataManager.GetPrice(position.Symbol);
+                totalValue += position.Quantity * price;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not fetch price for {Symbol}, excluding from portfolio exposure: {Error}", 
+                    position.Symbol, ex.Message);
+            }
+        }
+        return totalValue;
     }
 }

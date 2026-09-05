@@ -1,4 +1,5 @@
 using TradingEngine.DTOs;
+using TradingEngine.Models;
 
 namespace TradingEngine.Services;
 
@@ -34,10 +35,10 @@ public class OrderValidator : IOrderValidator
             return (false, "Quantity must be greater than 0");
         }
 
-        // Validate price
-        if (order.Price <= 0)
+        // Validate price - only required for limit orders
+        if (order.OrderType == OrderType.Limit && order.Price <= 0)
         {
-            return (false, "Price must be greater than 0");
+            return (false, "Limit orders must have a price greater than 0");
         }
 
         return (true, null);

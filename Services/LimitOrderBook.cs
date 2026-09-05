@@ -28,6 +28,7 @@ public class LimitOrderBook : ILimitOrderBook
     public decimal GetBestAsk(string symbol) =>
         _books.TryGetValue(symbol, out var book) ? book.BestAsk : decimal.MaxValue;
 
+    [Obsolete("Use MatchIteratively instead. This method only peeks at a single fill and does not reflect actual matching behavior.")]
     public bool TryMatch(OrderRequest order, out decimal fillPrice, out int fillQuantity)
     {
         fillPrice = 0;
@@ -106,6 +107,9 @@ public class LimitOrderBook : ILimitOrderBook
         public readonly SortedDictionary<decimal, PriceLevel> _bids = new(new DescendingComparer());
         public readonly SortedDictionary<decimal, PriceLevel> _asks = new();
 
+        // O(1) cancel index: orderId -> (price, side)
+        private readonly Dictionary<string, (decimal Price, OrderSide Side)> _orderIndex = new();
+
         public decimal BestBid => GetBest(_bids);
         public decimal BestAsk => GetBest(_asks);
 
@@ -118,6 +122,7 @@ public class LimitOrderBook : ILimitOrderBook
                 book.Add(order.Price, level);
             }
             level.AddOrder(order);
+            _orderIndex[order.OrderId] = (order.Price, order.Side);
         }
 
         public List<(decimal Price, int Quantity)> Match(OrderRequest order, ref int remainingQty)
@@ -148,6 +153,7 @@ public class LimitOrderBook : ILimitOrderBook
                     if (match.Quantity == 0)
                     {
                         level.RemoveFirst();
+                        _orderIndex.Remove(match.OrderId);
                     }
 
                     if (remainingQty == 0) break;
@@ -160,15 +166,21 @@ public class LimitOrderBook : ILimitOrderBook
 
         public void Cancel(string orderId)
         {
-            foreach (var level in _bids.Values.Concat(_asks.Values))
+            if (!_orderIndex.TryGetValue(orderId, out var entry))
+                return;
+
+            var book = entry.Side == OrderSide.Buy ? _bids : _asks;
+            if (book.TryGetValue(entry.Price, out var level))
             {
                 var order = level.Orders.FirstOrDefault(o => o.OrderId == orderId);
                 if (order != null)
-                {
                     level.Orders.Remove(order);
-                    return;
-                }
+
+                if (level.Count == 0)
+                    book.Remove(entry.Price);
             }
+
+            _orderIndex.Remove(orderId);
         }
 
         private decimal GetBest(SortedDictionary<decimal, PriceLevel> book)
