@@ -6,6 +6,8 @@ using TradingEngine.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using TradingEngine.Models.Quant;
+using TradingEngine.Services.Quant;
 
 namespace TradingEngine.Integration.Tests;
 
@@ -13,7 +15,7 @@ public class EndToEndOrderFlowTests
 {
     private readonly IMarketDataManager _marketData;
     private readonly IPortfolioManager _portfolio;
-    private readonly IOrderHandler _orderHandler;
+    private readonly OrderHandler _orderHandler;
 
     public EndToEndOrderFlowTests()
     {
@@ -30,7 +32,26 @@ public class EndToEndOrderFlowTests
 
         _marketData = new MarketDataManager(mockLogger1.Object, config);
         _portfolio = new PortfolioManager(mockLogger2.Object, config);
-        _orderHandler = new OrderHandler(mockLogger3.Object, _portfolio, _marketData);
+        var orderBook = new LimitOrderBook();
+        var pdeModel = new Mock<IPdeModel>();
+        pdeModel
+            .Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
+            .ReturnsAsync(new PdeResponse(true, 100, 100, 0, new Greeks(0, 0, 0, 0, 0), string.Empty));
+        var risk = new Mock<IRiskManagementService>();
+        risk.Setup(r => r.ValidateOrder(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
+            .Returns((true, string.Empty));
+
+        _orderHandler = new OrderHandler(
+            mockLogger3.Object,
+            new OrderValidator(_marketData),
+            new MatchingEngine(_portfolio, orderBook),
+            new TradeExecutor(new Mock<ILogger<TradeExecutor>>().Object, _portfolio),
+            _marketData,
+            new Mock<IPersistenceService>().Object,
+            pdeModel.Object,
+            _portfolio,
+            orderBook,
+            risk.Object);
     }
 
     [Fact]

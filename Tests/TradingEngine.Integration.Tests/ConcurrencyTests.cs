@@ -6,11 +6,40 @@ using TradingEngine.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using TradingEngine.Models.Quant;
+using TradingEngine.Services.Quant;
 
 namespace TradingEngine.Integration.Tests;
 
 public class ConcurrencyTests
 {
+    private static OrderHandler CreateOrderHandler(
+        Mock<ILogger<OrderHandler>> logger,
+        IPortfolioManager portfolio,
+        IMarketDataManager marketData)
+    {
+        var orderBook = new Mock<ILimitOrderBook>();
+        var pdeModel = new Mock<IPdeModel>();
+        pdeModel
+            .Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
+            .ReturnsAsync(new PdeResponse(true, 100, 100, 0, new Greeks(0, 0, 0, 0, 0), string.Empty));
+        var risk = new Mock<IRiskManagementService>();
+        risk.Setup(r => r.ValidateOrder(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
+            .Returns((true, string.Empty));
+
+        return new OrderHandler(
+            logger.Object,
+            new OrderValidator(marketData),
+            new MatchingEngine(portfolio, orderBook.Object),
+            new TradeExecutor(new Mock<ILogger<TradeExecutor>>().Object, portfolio),
+            marketData,
+            new Mock<IPersistenceService>().Object,
+            pdeModel.Object,
+            portfolio,
+            orderBook.Object,
+            risk.Object);
+    }
+
     [Fact]
     public void ConcurrentBuys_SameSymbol_AllProcessedSuccessfully()
     {
@@ -28,7 +57,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         var orders = Enumerable.Range(0, 100)
             .Select(_ => new OrderRequest 
@@ -73,7 +102,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Act - Concurrent orders that total more than available cash
         var tasks = Enumerable.Range(0, 200)
@@ -111,7 +140,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Pre-populate with shares
         orderHandler.ProcessOrder(new OrderRequest 
@@ -174,7 +203,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         var symbols = new[] { "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA" };
         var orders = symbols
@@ -217,7 +246,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Act - Submit 1000 concurrent orders
         var tasks = Enumerable.Range(0, 1000)
@@ -264,7 +293,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Act - Execute same sequence twice
         var responses1 = new List<OrderResponse>();
@@ -284,7 +313,7 @@ public class ConcurrencyTests
 
         // Reset and run again
         var portfolio2 = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler2 = new OrderHandler(mockLogger3.Object, portfolio2, marketData);
+        var orderHandler2 = CreateOrderHandler(mockLogger3, portfolio2, marketData);
 
         var responses2 = new List<OrderResponse>();
         for (int i = 0; i < 10; i++)
@@ -401,7 +430,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Pre-populate portfolio
         for (int i = 0; i < 3; i++)
@@ -475,7 +504,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Simulate 7 concurrent clients, each sending 30 orders
         var clientTasks = Enumerable.Range(0, 7)
@@ -526,7 +555,7 @@ public class ConcurrencyTests
 
         var marketData = new MarketDataManager(mockLogger1.Object, config);
         var portfolio = new PortfolioManager(mockLogger2.Object, config);
-        var orderHandler = new OrderHandler(mockLogger3.Object, portfolio, marketData);
+        var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         var initialCash = portfolio.GetBuyingPower();
 
@@ -609,7 +638,7 @@ public class ConcurrencyTests
             .ToList();
 
         // Assert - All readings should be consistent
-        cashReadings.Should().AllBe(expectedCash);
-        aaplReadings.Should().AllBe(true);
+        cashReadings.Should().AllSatisfy(value => value.Should().Be(expectedCash));
+        aaplReadings.Should().AllSatisfy(value => value.Should().BeTrue());
     }
 }

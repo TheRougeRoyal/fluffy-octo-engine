@@ -23,6 +23,13 @@ public class MarketDataManager : IMarketDataManager
         _logger.LogInformation("Market Data Manager initialized with {Count} symbols", _validSymbols.Count);
     }
 
+    public MarketDataManager(
+        ILogger<MarketDataManager> logger,
+        IOptions<TradingServerConfig> config)
+        : this(logger, config, new SimulatedMarketDataProvider())
+    {
+    }
+
     public decimal GetPrice(string symbol)
     {
         if (!_validSymbols.Contains(symbol))
