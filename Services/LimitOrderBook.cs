@@ -26,7 +26,7 @@ public class LimitOrderBook : ILimitOrderBook
     {
         if (_books.TryGetValue(symbol, out var book))
         {
-            lock (book._lock) return book.BestBid;
+            return book.BestBid;
         }
         return 0;
     }
@@ -35,7 +35,7 @@ public class LimitOrderBook : ILimitOrderBook
     {
         if (_books.TryGetValue(symbol, out var book))
         {
-            lock (book._lock) return book.BestAsk;
+            return book.BestAsk;
         }
         return decimal.MaxValue;
     }
@@ -151,8 +151,11 @@ public class LimitOrderBook : ILimitOrderBook
 
         private decimal GetBest(SortedDictionary<decimal, PriceLevel> book)
         {
-            if (book.Count == 0) return 0;
-            return book.Keys.First();
+            lock (_lock)
+            {
+                if (book.Count == 0) return 0;
+                return book.Keys.First();
+            }
         }
     }
 }
