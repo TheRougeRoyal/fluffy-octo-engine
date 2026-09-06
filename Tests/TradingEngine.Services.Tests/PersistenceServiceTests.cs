@@ -35,7 +35,7 @@ public class PersistenceServiceTests
     public async Task OnTradeExecutedAsync_CallsTradeRepository()
     {
         // Act
-        await _service.OnTradeExecutedAsync("ORD-1", "AAPL", 10, 150, OrderSide.Buy, 2000, 1500);
+        await _service.OnTradeExecutedAsync("ORD-1", "AAPL", 10, 150, OrderSide.Buy, 2000, 1500, new TradingEngine.Models.Quant.Greeks(0, 0, 0, 0, 0));
 
         // Assert
         _mockTradeRepo.Verify(r => r.SaveTradeAsync(It.Is<TradeEntity>(t => t.OrderId == "ORD-1")), Times.Once);

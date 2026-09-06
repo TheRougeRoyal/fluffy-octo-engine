@@ -12,10 +12,12 @@ public class MarketDataManagerTests
 {
     private readonly Mock<ILogger<MarketDataManager>> _mockLogger;
     private readonly IOptions<TradingServerConfig> _config;
+    private readonly Mock<IMarketDataProvider> _mockDataProvider;
 
     public MarketDataManagerTests()
     {
         _mockLogger = new Mock<ILogger<MarketDataManager>>();
+        _mockDataProvider = new Mock<IMarketDataProvider>();
         _config = Options.Create(new TradingServerConfig
         {
             InitialCashBalance = 100000m,
@@ -24,13 +26,15 @@ public class MarketDataManagerTests
         });
     }
 
+    private MarketDataManager CreateManager() => new MarketDataManager(_mockLogger.Object, _config, _mockDataProvider.Object);
+
     #region Initialization
 
     [Fact]
     public void Constructor_InitializesPrices_ForAllSymbols()
     {
         // Act
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Assert
         var prices = manager.GetAllPrices();
@@ -42,7 +46,7 @@ public class MarketDataManagerTests
     public void Constructor_InitializesKnownPrices_WithCorrectValues()
     {
         // Act
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Assert
         manager.GetPrice("AAPL").Should().Be(175.50m);
@@ -62,7 +66,7 @@ public class MarketDataManagerTests
     public void GetPrice_ValidSymbol_ReturnsPrice()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act
         var price = manager.GetPrice("AAPL");
@@ -76,7 +80,7 @@ public class MarketDataManagerTests
     public void GetPrice_AllValidSymbols_ReturnsPositivePrices()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
         var symbols = new[] { "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA" };
 
         // Act & Assert
@@ -91,7 +95,7 @@ public class MarketDataManagerTests
     public void GetPrice_InvalidSymbol_ThrowsException()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         var exception = Assert.Throws<InvalidOperationException>(() => manager.GetPrice("INVALID"));
@@ -103,7 +107,7 @@ public class MarketDataManagerTests
     public void GetPrice_EmptySymbol_ThrowsException()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() => manager.GetPrice(""));
@@ -117,7 +121,7 @@ public class MarketDataManagerTests
     public void IsValidSymbol_KnownSymbol_ReturnsTrue()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         manager.IsValidSymbol("AAPL").Should().BeTrue();
@@ -129,7 +133,7 @@ public class MarketDataManagerTests
     public void IsValidSymbol_UnknownSymbol_ReturnsFalse()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         manager.IsValidSymbol("UNKNOWN").Should().BeFalse();
@@ -141,7 +145,7 @@ public class MarketDataManagerTests
     public void IsValidSymbol_EmptyString_ReturnsFalse()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         manager.IsValidSymbol("").Should().BeFalse();
@@ -151,7 +155,7 @@ public class MarketDataManagerTests
     public void IsValidSymbol_CaseSensitive()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         manager.IsValidSymbol("AAPL").Should().BeTrue();
@@ -167,7 +171,7 @@ public class MarketDataManagerTests
     public void GetAllPrices_ReturnsAllConfiguredSymbols()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act
         var prices = manager.GetAllPrices();
@@ -182,7 +186,7 @@ public class MarketDataManagerTests
     public void GetAllPrices_ReturnsPositiveValues()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act
         var prices = manager.GetAllPrices();
@@ -195,7 +199,7 @@ public class MarketDataManagerTests
     public void GetAllPrices_ReturnsCopy_NotReference()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act
         var prices1 = manager.GetAllPrices();
@@ -213,7 +217,7 @@ public class MarketDataManagerTests
     public void UpdatePrice_ValidSymbol_UpdatesSuccessfully()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
         var originalPrice = manager.GetPrice("AAPL");
 
         // Act
@@ -228,7 +232,7 @@ public class MarketDataManagerTests
     public void UpdatePrice_InvalidSymbol_ThrowsException()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act & Assert
         var exception = Assert.Throws<InvalidOperationException>(() => manager.UpdatePrice("INVALID", 100m));
@@ -240,7 +244,7 @@ public class MarketDataManagerTests
     public void UpdatePrice_MultipleUpdates_KeepsLatestPrice()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
 
         // Act
         manager.UpdatePrice("AAPL", 180m);
@@ -255,7 +259,7 @@ public class MarketDataManagerTests
     public void UpdatePrice_DoesNotAffectOtherSymbols()
     {
         // Arrange
-        var manager = new MarketDataManager(_mockLogger.Object, _config);
+        var manager = CreateManager();
         var googlPrice = manager.GetPrice("GOOGL");
 
         // Act
@@ -281,7 +285,7 @@ public class MarketDataManagerTests
         });
 
         // Act
-        var manager = new MarketDataManager(_mockLogger.Object, customConfig);
+        var manager = new MarketDataManager(_mockLogger.Object, customConfig, _mockDataProvider.Object);
 
         // Assert
         manager.IsValidSymbol("CUSTOM1").Should().BeTrue();

@@ -15,7 +15,8 @@ public class MatchingEngineTests
     public MatchingEngineTests()
     {
         _mockPortfolio = new Mock<IPortfolioManager>();
-        _engine = new MatchingEngine(_mockPortfolio.Object);
+        var mockOrderBook = new Mock<ILimitOrderBook>();
+        _engine = new MatchingEngine(_mockPortfolio.Object, mockOrderBook.Object);
     }
 
     #region Buy Order Matching

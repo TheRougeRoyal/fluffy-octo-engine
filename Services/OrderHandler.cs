@@ -29,32 +29,6 @@ public class OrderHandler : IOrderHandler
 
     public OrderHandler(
         ILogger<OrderHandler> logger,
-        IPortfolioManager portfolioManager,
-        IMarketDataManager marketDataManager,
-        IPersistenceService persistenceService,
-        IPdeModel pdeModel,
-        ILimitOrderBook orderBook,
-        IRiskManagementService riskManagementService)
-    {
-        _logger = logger;
-        _marketDataManager = marketDataManager;
-        _portfolioManager = portfolioManager;
-        _persistenceService = persistenceService;
-        _pdeModel = pdeModel;
-        _orderBook = orderBook;
-        _riskManagementService = riskManagementService;
-
-        // Create dependencies with concrete implementations
-        _validator = new OrderValidator(marketDataManager);
-        _matchingEngine = new MatchingEngine(portfolioManager, orderBook);
-        _tradeExecutor = new TradeExecutor(new Logger<TradeExecutor>(new LoggerFactory()), portfolioManager);
-    }
-
-    /// <summary>
-    /// Constructor for testing/DI - allows injection of all dependencies.
-    /// </summary>
-    public OrderHandler(
-        ILogger<OrderHandler> logger,
         IOrderValidator validator,
         IMatchingEngine matchingEngine,
         ITradeExecutor tradeExecutor,

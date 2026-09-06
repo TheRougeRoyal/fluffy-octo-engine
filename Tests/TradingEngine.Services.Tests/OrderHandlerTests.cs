@@ -6,6 +6,8 @@ using TradingEngine.Models;
 using TradingEngine.Services;
 using TradingEngine.Services.Tests.Fixtures;
 using Microsoft.Extensions.Logging;
+using TradingEngine.Services.Quant;
+using TradingEngine.Models.Quant;
 
 namespace TradingEngine.Services.Tests;
 
@@ -22,7 +24,29 @@ public class OrderHandlerTests
         _mockMarketData = new Mock<IMarketDataManager>();
         _mockLogger = new Mock<ILogger<OrderHandler>>();
 
-        _handler = new OrderHandler(_mockLogger.Object, _mockPortfolio.Object, _mockMarketData.Object);
+        var validator = new OrderValidator(_mockMarketData.Object);
+        var matchingEngine = new MatchingEngine(_mockPortfolio.Object, new Mock<ILimitOrderBook>().Object);
+        var tradeExecutor = new TradeExecutor(new Mock<ILogger<TradeExecutor>>().Object, _mockPortfolio.Object);
+        var persistence = new Mock<IPersistenceService>().Object;
+        var pdeModel = new Mock<IPdeModel>();
+        pdeModel.Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
+            .ReturnsAsync(new PdeResponse(true, 100, 100, 0, new Greeks(0,0,0,0,0), string.Empty));
+        var orderBook = new Mock<ILimitOrderBook>();
+        var risk = new Mock<IRiskManagementService>();
+        risk.Setup(r => r.ValidateOrder(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
+            .Returns((true, string.Empty));
+
+        _handler = new OrderHandler(
+            _mockLogger.Object,
+            validator,
+            matchingEngine,
+            tradeExecutor,
+            _mockMarketData.Object,
+            persistence,
+            pdeModel.Object,
+            _mockPortfolio.Object,
+            orderBook.Object,
+            risk.Object);
     }
 
     #region Valid Order Scenarios
