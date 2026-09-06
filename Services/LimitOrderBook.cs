@@ -22,56 +22,22 @@ public class LimitOrderBook : ILimitOrderBook
         book.AddOrder(order);
     }
 
-    public decimal GetBestBid(string symbol) =>
-        _books.TryGetValue(symbol, out var book) ? book.BestBid : 0;
-
-    public decimal GetBestAsk(string symbol) =>
-        _books.TryGetValue(symbol, out var book) ? book.BestAsk : decimal.MaxValue;
-
-    [Obsolete("Use MatchIteratively instead. This method only peeks at a single fill and does not reflect actual matching behavior.")]
-    public bool TryMatch(OrderRequest order, out decimal fillPrice, out int fillQuantity)
+    public decimal GetBestBid(string symbol)
     {
-        fillPrice = 0;
-        fillQuantity = 0;
-
-        if (!_books.TryGetValue(order.Symbol, out var book)) return false;
-
-        lock (book._lock)
+        if (_books.TryGetValue(symbol, out var book))
         {
-            if (order.Side == OrderSide.Buy)
-            {
-                if (book._asks.Count == 0) return false;
-                var bestAsk = book._asks.First();
-                if (bestAsk.Key <= order.Price)
-                {
-                    var level = bestAsk.Value;
-                    var match = level.Peek();
-                    if (match != null)
-                    {
-                        fillPrice = match.Price;
-                        fillQuantity = Math.Min(order.Quantity, match.Quantity);
-                        return true;
-                    }
-                }
-            }
-            else
-            {
-                if (book._bids.Count == 0) return false;
-                var bestBid = book._bids.First();
-                if (bestBid.Key >= order.Price)
-                {
-                    var level = bestBid.Value;
-                    var match = level.Peek();
-                    if (match != null)
-                    {
-                        fillPrice = match.Price;
-                        fillQuantity = Math.Min(order.Quantity, match.Quantity);
-                        return true;
-                    }
-                }
-            }
-            return false;
+            lock (book._lock) return book.BestBid;
         }
+        return 0;
+    }
+
+    public decimal GetBestAsk(string symbol)
+    {
+        if (_books.TryGetValue(symbol, out var book))
+        {
+            lock (book._lock) return book.BestAsk;
+        }
+        return decimal.MaxValue;
     }
 
     public IEnumerable<(decimal Price, int Quantity)> MatchIteratively(OrderRequest order)
