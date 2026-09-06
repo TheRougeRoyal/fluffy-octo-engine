@@ -59,9 +59,17 @@ public class RiskManagementService : IRiskManagementService
         }
 
         // 5. Max Portfolio Exposure
-        if (GetTotalPortfolioValue() + orderValue > _config.MaxPortfolioExposure)
+        try
         {
-            return (false, $"Order would exceed maximum total portfolio exposure (${_config.MaxPortfolioExposure:N2})");
+            if (GetTotalPortfolioValue() + orderValue > _config.MaxPortfolioExposure)
+            {
+                return (false, $"Order would exceed maximum total portfolio exposure (${_config.MaxPortfolioExposure:N2})");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Risk check failed: could not calculate total portfolio exposure.");
+            return (false, $"Risk check failed: market data unavailable for portfolio valuation. {ex.Message}");
         }
 
         return (true, string.Empty);
@@ -82,16 +90,8 @@ public class RiskManagementService : IRiskManagementService
         decimal totalValue = 0m;
         foreach (var position in _portfolioManager.Positions.Values)
         {
-            try
-            {
-                var price = _marketDataManager.GetPrice(position.Symbol);
-                totalValue += position.Quantity * price;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Could not fetch price for {Symbol}, excluding from portfolio exposure: {Error}", 
-                    position.Symbol, ex.Message);
-            }
+            var price = _marketDataManager.GetPrice(position.Symbol);
+            totalValue += position.Quantity * price;
         }
         return totalValue;
     }
