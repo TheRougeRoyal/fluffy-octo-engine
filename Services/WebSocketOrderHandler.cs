@@ -98,7 +98,7 @@ public class WebSocketOrderHandler
                     }
 
                     orderRequest.ClientId = clientId;
-                    var response = _orderHandler.ProcessOrder(orderRequest);
+                    var response = await _orderHandler.ProcessOrderAsync(orderRequest);
                     await SendTextAsync(webSocket, JsonConvert.SerializeObject(response));
                     _logger.LogInformation("Response sent to {Endpoint}", clientEndpoint);
                 }

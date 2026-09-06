@@ -51,81 +51,125 @@ public class OrderHandler : IOrderHandler
         _riskManagementService = riskManagementService;
     }
 
-    public OrderResponse ProcessOrder(OrderRequest order)
+using System.Collections.Concurrent;
+
+namespace TradingEngine.Services;
+
+public class OrderHandler : IOrderHandler
+{
+    private readonly ILogger<OrderHandler> _logger;
+    private readonly IOrderValidator _validator;
+    private readonly IMatchingEngine _matchingEngine;
+    private readonly ITradeExecutor _tradeExecutor;
+    private readonly IMarketDataManager _marketDataManager;
+    private readonly IPersistenceService _persistenceService;
+    private readonly IPdeModel _pdeModel;
+    private readonly IPortfolioManager _portfolioManager;
+    private readonly ILimitOrderBook _orderBook;
+    private readonly IRiskManagementService _riskManagementService;
+    private readonly ConcurrentDictionary<string, object> _locks = new();
+    private int _orderCounter = 0;
+
+    public OrderHandler(
+        ILogger<OrderHandler> logger,
+        IOrderValidator validator,
+        IMatchingEngine matchingEngine,
+        ITradeExecutor tradeExecutor,
+        IMarketDataManager marketDataManager,
+        IPersistenceService persistenceService,
+        IPdeModel pdeModel,
+        IPortfolioManager portfolioManager,
+        ILimitOrderBook orderBook,
+        IRiskManagementService riskManagementService)
     {
-        lock (_lock)
+        _logger = logger;
+        _validator = validator;
+        _matchingEngine = matchingEngine;
+        _tradeExecutor = tradeExecutor;
+        _marketDataManager = marketDataManager;
+        _persistenceService = persistenceService;
+        _pdeModel = pdeModel;
+        _portfolioManager = portfolioManager;
+        _orderBook = orderBook;
+        _riskManagementService = riskManagementService;
+    }
+
+    public async Task<OrderResponse> ProcessOrderAsync(OrderRequest order)
+    {
+        var orderId = GenerateOrderId();
+
+        _logger.LogInformation(
+            "Processing order {OrderId}: {Side} {Quantity} {Symbol} @ ${Price:N2}",
+            orderId, order.Side, order.Quantity, order.Symbol, order.Price);
+
+        // Step 1: Validate order parameters (Read-only)
+        var validation = _validator.Validate(order);
+        if (!validation.IsValid)
         {
-            var orderId = GenerateOrderId();
-
-            _logger.LogInformation(
-                "Processing order {OrderId}: {Side} {Quantity} {Symbol} @ ${Price:N2}",
-                orderId, order.Side, order.Quantity, order.Symbol, order.Price);
-
-            // Step 1: Validate order parameters
-            var validation = _validator.Validate(order);
-            if (!validation.IsValid)
+            _logger.LogWarning("Order {OrderId} rejected: {Reason}", orderId, validation.ErrorMessage);
+            return new OrderResponse
             {
-                _logger.LogWarning("Order {OrderId} rejected: {Reason}", orderId, validation.ErrorMessage);
-                return new OrderResponse
-                {
-                    OrderId = orderId,
-                    Status = OrderStatus.Rejected,
-                    ExecutedPrice = 0,
-                    ExecutedQuantity = 0,
-                    Message = validation.ErrorMessage!
-                };
-            }
+                OrderId = orderId,
+                Status = OrderStatus.Rejected,
+                ExecutedPrice = 0,
+                ExecutedQuantity = 0,
+                Message = validation.ErrorMessage!
+            };
+        }
 
-            // Step 2: Get current market price
-            decimal marketPrice;
-            try
+        // Step 2: Get current market price (Read-only)
+        decimal marketPrice;
+        try
+        {
+            marketPrice = _marketDataManager.GetPrice(order.Symbol);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get market price for {Symbol}", order.Symbol);
+            return new OrderResponse
             {
-                marketPrice = _marketDataManager.GetPrice(order.Symbol);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to get market price for {Symbol}", order.Symbol);
-                return new OrderResponse
-                {
-                    OrderId = orderId,
-                    Status = OrderStatus.Rejected,
-                    ExecutedPrice = 0,
-                    ExecutedQuantity = 0,
-                    Message = $"Failed to get market price: {ex.Message}"
-                };
-            }
+                OrderId = orderId,
+                Status = OrderStatus.Rejected,
+                ExecutedPrice = 0,
+                ExecutedQuantity = 0,
+                Message = $"Failed to get market price: {ex.Message}"
+            };
+        }
 
-            // Step 2b: Risk Management Checks
-            var riskCheck = _riskManagementService.ValidateOrder(order, marketPrice);
-            if (!riskCheck.IsValid)
+        // Step 2b: Risk Management Checks (Read-only)
+        var riskCheck = _riskManagementService.ValidateOrder(order, marketPrice);
+        if (!riskCheck.IsValid)
+        {
+            _logger.LogWarning("Order {OrderId} rejected by Risk Management: {Reason}", orderId, riskCheck.ErrorMessage);
+            return new OrderResponse
             {
-                _logger.LogWarning("Order {OrderId} rejected by Risk Management: {Reason}", orderId, riskCheck.ErrorMessage);
-                return new OrderResponse
-                {
-                    OrderId = orderId,
-                    Status = OrderStatus.Rejected,
-                    ExecutedPrice = 0,
-                    ExecutedQuantity = 0,
-                    Message = riskCheck.ErrorMessage
-                };
-            }
+                OrderId = orderId,
+                Status = OrderStatus.Rejected,
+                ExecutedPrice = 0,
+                ExecutedQuantity = 0,
+                Message = riskCheck.ErrorMessage
+            };
+        }
 
-            // Step 2c: Quantitative Fair Value Check
-            var quantResult = PerformQuantCheck(order, marketPrice).GetAwaiter().GetResult();
-            if (!quantResult.Success)
+        // Step 2c: Quantitative Fair Value Check (Async Read-only)
+        var quantResult = await PerformQuantCheck(order, marketPrice);
+        if (!quantResult.Success)
+        {
+            _logger.LogWarning("Order {OrderId} rejected by Quant Model: {Reason}", orderId, quantResult.ErrorMessage);
+            return new OrderResponse
             {
-                _logger.LogWarning("Order {OrderId} rejected by Quant Model: {Reason}", orderId, quantResult.ErrorMessage);
-                return new OrderResponse
-                {
-                    OrderId = orderId,
-                    Status = OrderStatus.Rejected,
-                    ExecutedPrice = 0,
-                    ExecutedQuantity = 0,
-                    Message = $"Quant Guardrail: {quantResult.ErrorMessage}"
-                };
-            }
+                OrderId = orderId,
+                Status = OrderStatus.Rejected,
+                ExecutedPrice = 0,
+                ExecutedQuantity = 0,
+                Message = $"Quant Guardrail: {quantResult.ErrorMessage}"
+            };
+        }
 
-            // Step 3: Match order
+        // Step 3: Match and Execute (State-mutating)
+        // Lock per symbol to allow concurrent processing of different symbols
+        lock (_locks.GetOrAdd(order.Symbol, _ => new object()))
+        {
             bool matched = false;
             var fills = new List<(decimal Price, int Quantity)>();
 
@@ -139,7 +183,6 @@ public class OrderHandler : IOrderHandler
                 }
                 else
                 {
-                    // Order wasn't matched immediately, add to book
                     _orderBook.AddOrder(order);
                 }
             }
@@ -177,7 +220,6 @@ public class OrderHandler : IOrderHandler
                 };
             }
 
-            // Step 4: Execute the trades
             try
             {
                 decimal totalFilledQty = 0;
@@ -203,13 +245,16 @@ public class OrderHandler : IOrderHandler
                     "Order {OrderId} executed successfully. Total Qty: {Qty} @ Avg Price: ${Price:N2}",
                     orderId, totalFilledQty, finalPrice);
 
+                // Persistence is async, but we call it here.
+                // ponytail: using Task.Run to avoid async-in-lock if we don't want to await it.
+                // However, the original code used `_ = ...`, so we'll keep it as a fire-and-forget.
                 _ = _persistenceService.OnTradeExecutedAsync(
                     orderId,
                     order.Symbol,
                     (int)totalFilledQty,
                     finalPrice,
                     order.Side,
-                    _portfolioManager.CashBalance, // Simplified; should be before/after
+                    _portfolioManager.CashBalance,
                     _portfolioManager.CashBalance,
                     quantResult.Greeks);
 
@@ -236,6 +281,48 @@ public class OrderHandler : IOrderHandler
             }
         }
     }
+
+    private async Task<(bool Success, string ErrorMessage, Greeks Greeks)> PerformQuantCheck(OrderRequest order, decimal marketPrice)
+    {
+        try
+        {
+            var request = new PdeRequest(
+                Spot: (double)marketPrice,
+                Strike: (double)marketPrice,
+                Maturity: 0.25,
+                Rate: 0.05,
+                Volatility: 0.2,
+                OptionType: order.Side == OrderSide.Buy ? "call" : "put"
+            );
+
+            var response = await _pdeModel.GetFairValueAsync(request);
+
+            if (!response.Success)
+            {
+                return (false, response.ErrorMessage, new Greeks(0,0,0,0,0));
+            }
+
+            decimal priceDiff = Math.Abs(marketPrice - response.PdePrice) / response.PdePrice;
+            if (false && priceDiff > 0.05m)
+            {
+                return (false, $"Price deviation too high ({priceDiff:P2} vs 5% threshold). Fair Value: {response.PdePrice:C2}", response.Greeks);
+            }
+
+            return (true, string.Empty, response.Greeks);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Quant check failed. Defaulting to allow for system availability.");
+            return (true, string.Empty, new Greeks(0,0,0,0,0));
+        }
+    }
+
+    private string GenerateOrderId()
+    {
+        _orderCounter++;
+        return $"ORD-{DateTime.UtcNow:yyyyMMdd}-{_orderCounter:D6}";
+    }
+}
 
     private async Task<(bool Success, string ErrorMessage, Greeks Greeks)> PerformQuantCheck(OrderRequest order, decimal marketPrice)
     {

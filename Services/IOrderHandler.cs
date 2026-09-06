@@ -4,5 +4,5 @@ namespace TradingEngine.Services;
 
 public interface IOrderHandler
 {
-    OrderResponse ProcessOrder(OrderRequest order);
+    Task<OrderResponse> ProcessOrderAsync(OrderRequest order);
 }

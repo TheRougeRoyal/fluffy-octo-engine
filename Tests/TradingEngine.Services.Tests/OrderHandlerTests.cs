@@ -52,7 +52,7 @@ public class OrderHandlerTests
     #region Valid Order Scenarios
 
     [Fact]
-    public void ProcessOrder_BuyOrderAboveMarketPrice_ExecutesSuccessfully()
+    public async Task ProcessOrder_BuyOrderAboveMarketPrice_ExecutesSuccessfully()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -67,7 +67,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Executed);
@@ -78,7 +78,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_SellOrderBelowMarketPrice_ExecutesSuccessfully()
+    public async Task ProcessOrder_SellOrderBelowMarketPrice_ExecutesSuccessfully()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -93,7 +93,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientShares("AAPL", 5)).Returns(true);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Executed);
@@ -103,7 +103,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_BuyWithExactMarketPrice_ExecutesAtMarketPrice()
+    public async Task ProcessOrder_BuyWithExactMarketPrice_ExecutesAtMarketPrice()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -118,7 +118,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.ExecutedPrice.Should().Be(150);
@@ -126,7 +126,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_SellWithExactMarketPrice_ExecutesAtMarketPrice()
+    public async Task ProcessOrder_SellWithExactMarketPrice_ExecutesAtMarketPrice()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -141,7 +141,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientShares("MSFT", 15)).Returns(true);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.ExecutedPrice.Should().Be(378.90m);
@@ -149,7 +149,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_LargeBuyOrder_ExecutesCorrectly()
+    public async Task ProcessOrder_LargeBuyOrder_ExecutesCorrectly()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -164,7 +164,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Executed);
@@ -177,7 +177,7 @@ public class OrderHandlerTests
     #region Validation Failures
 
     [Fact]
-    public void ProcessOrder_InvalidSymbol_ReturnsRejected()
+    public async Task ProcessOrder_InvalidSymbol_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -189,7 +189,7 @@ public class OrderHandlerTests
         _mockMarketData.Setup(m => m.IsValidSymbol("INVALID")).Returns(false);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -199,7 +199,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_ZeroQuantity_ReturnsRejected()
+    public async Task ProcessOrder_ZeroQuantity_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -209,7 +209,7 @@ public class OrderHandlerTests
             .Build();
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -217,7 +217,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_NegativeQuantity_ReturnsRejected()
+    public async Task ProcessOrder_NegativeQuantity_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -227,7 +227,7 @@ public class OrderHandlerTests
             .Build();
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -235,7 +235,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_NegativePrice_ReturnsRejected()
+    public async Task ProcessOrder_NegativePrice_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -245,7 +245,7 @@ public class OrderHandlerTests
             .Build();
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -253,7 +253,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_ZeroPrice_ReturnsRejected()
+    public async Task ProcessOrder_ZeroPrice_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -263,7 +263,7 @@ public class OrderHandlerTests
             .Build();
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -271,7 +271,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_EmptySymbol_ReturnsRejected()
+    public async Task ProcessOrder_EmptySymbol_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -281,7 +281,7 @@ public class OrderHandlerTests
             .Build();
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -289,7 +289,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_NullSymbol_ReturnsRejected()
+    public async Task ProcessOrder_NullSymbol_ReturnsRejected()
     {
         // Arrange
         var order = new OrderRequest
@@ -301,7 +301,7 @@ public class OrderHandlerTests
         };
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -313,7 +313,7 @@ public class OrderHandlerTests
     #region Matching Failures
 
     [Fact]
-    public void ProcessOrder_BuyBelowMarketPrice_ReturnsRejected()
+    public async Task ProcessOrder_BuyBelowMarketPrice_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -327,7 +327,7 @@ public class OrderHandlerTests
         _mockMarketData.Setup(m => m.GetPrice("AAPL")).Returns(175);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -335,7 +335,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_SellAboveMarketPrice_ReturnsRejected()
+    public async Task ProcessOrder_SellAboveMarketPrice_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -349,7 +349,7 @@ public class OrderHandlerTests
         _mockMarketData.Setup(m => m.GetPrice("AAPL")).Returns(175);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -357,7 +357,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_InsufficientCash_ReturnsRejected()
+    public async Task ProcessOrder_InsufficientCash_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -373,7 +373,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.GetBuyingPower()).Returns(1000);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -382,7 +382,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_InsufficientShares_ReturnsRejected()
+    public async Task ProcessOrder_InsufficientShares_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -395,7 +395,7 @@ public class OrderHandlerTests
         _mockMarketData.Setup(m => m.IsValidSymbol("AAPL")).Returns(true);
         _mockMarketData.Setup(m => m.GetPrice("AAPL")).Returns(175);
         _mockPortfolio.Setup(p => p.HasSufficientShares("AAPL", 100)).Returns(false);
-        
+
         var positions = new Dictionary<string, Position>
         {
             { "AAPL", new Position { Symbol = "AAPL", Quantity = 50, AverageCost = 170 } }
@@ -403,7 +403,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.Positions).Returns(positions);
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -412,7 +412,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_SellWithoutAnyPosition_ReturnsRejected()
+    public async Task ProcessOrder_SellWithoutAnyPosition_ReturnsRejected()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -428,7 +428,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.Positions).Returns(new Dictionary<string, Position>());
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -441,7 +441,7 @@ public class OrderHandlerTests
     #region Edge Cases
 
     [Fact]
-    public void ProcessOrder_MultipleOrdersSameSymbol_UpdatesPortfolioCorrectly()
+    public async Task ProcessOrder_MultipleOrdersSameSymbol_UpdatesPortfolioCorrectly()
     {
         // Arrange
         var order1 = new OrderBuilder()
@@ -461,8 +461,8 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var response1 = _handler.ProcessOrder(order1);
-        var response2 = _handler.ProcessOrder(order2);
+        var response1 = await _handler.ProcessOrderAsync(order1);
+        var response2 = await _handler.ProcessOrderAsync(order2);
 
         // Assert
         response1.Status.Should().Be(OrderStatus.Executed);
@@ -472,7 +472,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_BuyThenSellSameSymbol_CalculatesCorrectly()
+    public async Task ProcessOrder_BuyThenSellSameSymbol_CalculatesCorrectly()
     {
         // Arrange - Buy first
         var buyOrder = new OrderBuilder()
@@ -496,8 +496,8 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientShares("MSFT", 10)).Returns(true);
 
         // Act
-        var buyResponse = _handler.ProcessOrder(buyOrder);
-        var sellResponse = _handler.ProcessOrder(sellOrder);
+        var buyResponse = await _handler.ProcessOrderAsync(buyOrder);
+        var sellResponse = await _handler.ProcessOrderAsync(sellOrder);
 
         // Assert
         buyResponse.Status.Should().Be(OrderStatus.Executed);
@@ -507,7 +507,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_DifferentSymbols_AllProcessedIndependently()
+    public async Task ProcessOrder_DifferentSymbols_AllProcessedIndependently()
     {
         // Arrange
         var orderAAPL = new OrderBuilder().WithSymbol("AAPL").WithPrice(180).Build();
@@ -521,20 +521,20 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var response1 = _handler.ProcessOrder(orderAAPL);
-        var response2 = _handler.ProcessOrder(orderGOOGL);
-        var response3 = _handler.ProcessOrder(orderMSFT);
+        var response1 = await _handler.ProcessOrderAsync(orderAAPL);
+        var response2 = await _handler.ProcessOrderAsync(orderGOOGL);
+        var response3 = await _handler.ProcessOrderAsync(orderMSFT);
 
         // Assert
         response1.Status.Should().Be(OrderStatus.Executed);
         response2.Status.Should().Be(OrderStatus.Executed);
         response3.Status.Should().Be(OrderStatus.Executed);
-        
+
         _mockPortfolio.Verify(p => p.UpdateOnBuy(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<decimal>()), Times.Exactly(3));
     }
 
     [Fact]
-    public void ProcessOrder_MarketDataException_ReturnsRejectedWithError()
+    public async Task ProcessOrder_MarketDataException_ReturnsRejectedWithError()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -545,7 +545,7 @@ public class OrderHandlerTests
         _mockMarketData.Setup(m => m.GetPrice("AAPL")).Throws(new Exception("Market data unavailable"));
 
         // Act
-        var response = _handler.ProcessOrder(order);
+        var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
@@ -553,7 +553,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_UniqueOrderIds_GeneratedForEachOrder()
+    public async Task ProcessOrder_UniqueOrderIds_GeneratedForEachOrder()
     {
         // Arrange
         var order1 = new OrderBuilder().WithSymbol("AAPL").WithPrice(180).Build();
@@ -564,8 +564,8 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var response1 = _handler.ProcessOrder(order1);
-        var response2 = _handler.ProcessOrder(order2);
+        var response1 = await _handler.ProcessOrderAsync(order1);
+        var response2 = await _handler.ProcessOrderAsync(order2);
 
         // Assert
         response1.OrderId.Should().NotBeNullOrEmpty();
@@ -578,7 +578,7 @@ public class OrderHandlerTests
     #region Concurrency
 
     [Fact]
-    public void ProcessOrder_ConcurrentOrders_AllProcessedSequentially()
+    public async Task ProcessOrder_ConcurrentOrders_AllProcessedSequentially()
     {
         // Arrange
         var orders = Enumerable.Range(0, 10)
@@ -594,7 +594,7 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientCash(It.IsAny<decimal>())).Returns(true);
 
         // Act
-        var responses = orders.Select(o => _handler.ProcessOrder(o)).ToList();
+        var responses = await Task.WhenAll(orders.Select(o => _handler.ProcessOrderAsync(o)));
 
         // Assert
         responses.Should().AllSatisfy(r => r.Status.Should().Be(OrderStatus.Executed));
@@ -603,7 +603,7 @@ public class OrderHandlerTests
     }
 
     [Fact]
-    public void ProcessOrder_MixedBuySellOrders_ProcessedCorrectly()
+    public async Task ProcessOrder_MixedBuySellOrders_ProcessedCorrectly()
     {
         // Arrange
         var buyOrder = new OrderBuilder().WithSymbol("AAPL").WithPrice(180).AsBuy().Build();
@@ -615,8 +615,8 @@ public class OrderHandlerTests
         _mockPortfolio.Setup(p => p.HasSufficientShares("AAPL", It.IsAny<int>())).Returns(true);
 
         // Act
-        var buyResponse = _handler.ProcessOrder(buyOrder);
-        var sellResponse = _handler.ProcessOrder(sellOrder);
+        var buyResponse = await _handler.ProcessOrderAsync(buyOrder);
+        var sellResponse = await _handler.ProcessOrderAsync(sellOrder);
 
         // Assert
         buyResponse.Status.Should().Be(OrderStatus.Executed);
