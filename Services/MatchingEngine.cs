@@ -5,7 +5,7 @@ namespace TradingEngine.Services;
 
 /// <summary>
 /// Implements order matching logic.
-/// Matches buy orders if price >= market price, sell orders if price <= market price.
+/// Market orders are matched unconditionally; limit orders are handled via the OrderBook.
 /// </summary>
 public class MatchingEngine : IMatchingEngine
 {
