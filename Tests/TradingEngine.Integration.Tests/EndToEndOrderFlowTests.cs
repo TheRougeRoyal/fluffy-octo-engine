@@ -55,20 +55,20 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_BuyOrder_CreatesPositionUpdatesPortfolio()
+    public async Task FullOrderFlow_BuyOrder_CreatesPositionUpdatesPortfolio()
     {
         // Arrange
         var initialCash = _portfolio.GetBuyingPower();
-        var order = new OrderRequest 
-        { 
-            Symbol = "AAPL", 
-            Quantity = 10, 
-            Price = 200, 
-            Side = OrderSide.Buy 
+        var order = new OrderRequest
+        {
+            Symbol = "AAPL",
+            Quantity = 10,
+            Price = 200,
+            Side = OrderSide.Buy
         };
 
         // Act
-        var response = _orderHandler.ProcessOrder(order);
+        var response = await _orderHandler.ProcessOrderAsync(order);
 
         // Assert
         response.Status.Should().Be(OrderStatus.Executed);
@@ -78,8 +78,9 @@ public class EndToEndOrderFlowTests
         _portfolio.GetBuyingPower().Should().BeLessThan(initialCash);
     }
 
+
     [Fact]
-    public void FullOrderFlow_SellPartialPosition_CorrectlyRecalculates()
+    public async Task FullOrderFlow_SellPartialPosition_CorrectlyRecalculates()
     {
         // Arrange
         var buyOrder = new OrderRequest 
@@ -89,7 +90,7 @@ public class EndToEndOrderFlowTests
             Price = 200, 
             Side = OrderSide.Buy 
         };
-        var buyResponse = _orderHandler.ProcessOrder(buyOrder);
+        var buyResponse = await _orderHandler.ProcessOrderAsync(buyOrder);
         var initialCashAfterBuy = _portfolio.GetBuyingPower();
 
         var sellOrder = new OrderRequest 
@@ -101,7 +102,7 @@ public class EndToEndOrderFlowTests
         };
 
         // Act
-        var sellResponse = _orderHandler.ProcessOrder(sellOrder);
+        var sellResponse = await _orderHandler.ProcessOrderAsync(sellOrder);
 
         // Assert
         sellResponse.Status.Should().Be(OrderStatus.Executed);
@@ -110,10 +111,10 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_ComplexSequence_BuyThenSellThenBuyAgain_CorrectResults()
+    public async Task FullOrderFlow_ComplexSequence_BuyThenSellThenBuyAgain_CorrectResults()
     {
         // Arrange & Act
-        var buy1 = _orderHandler.ProcessOrder(new OrderRequest 
+        var buy1 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "MSFT", 
             Quantity = 50, 
@@ -121,7 +122,7 @@ public class EndToEndOrderFlowTests
             Side = OrderSide.Buy 
         });
         
-        var sell1 = _orderHandler.ProcessOrder(new OrderRequest 
+        var sell1 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "MSFT", 
             Quantity = 25, 
@@ -129,7 +130,7 @@ public class EndToEndOrderFlowTests
             Side = OrderSide.Sell 
         });
         
-        var buy2 = _orderHandler.ProcessOrder(new OrderRequest 
+        var buy2 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "MSFT", 
             Quantity = 30, 
@@ -146,10 +147,10 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_BuyMultipleSymbols_TracksAllPositions()
+    public async Task FullOrderFlow_BuyMultipleSymbols_TracksAllPositions()
     {
         // Act
-        var response1 = _orderHandler.ProcessOrder(new OrderRequest 
+        var response1 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "AAPL", 
             Quantity = 10, 
@@ -157,7 +158,7 @@ public class EndToEndOrderFlowTests
             Side = OrderSide.Buy 
         });
         
-        var response2 = _orderHandler.ProcessOrder(new OrderRequest 
+        var response2 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "GOOGL", 
             Quantity = 5, 
@@ -165,7 +166,7 @@ public class EndToEndOrderFlowTests
             Side = OrderSide.Buy 
         });
         
-        var response3 = _orderHandler.ProcessOrder(new OrderRequest 
+        var response3 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "TSLA", 
             Quantity = 20, 
@@ -183,10 +184,10 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_SellFullPosition_RemovesFromPortfolio()
+    public async Task FullOrderFlow_SellFullPosition_RemovesFromPortfolio()
     {
         // Arrange
-        _orderHandler.ProcessOrder(new OrderRequest 
+        await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "AMZN", 
             Quantity = 50, 
@@ -195,7 +196,7 @@ public class EndToEndOrderFlowTests
         });
 
         // Act
-        var sellResponse = _orderHandler.ProcessOrder(new OrderRequest 
+        var sellResponse = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "AMZN", 
             Quantity = 50, 
@@ -209,14 +210,14 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_InsufficientCashRejection_DoesNotModifyPortfolio()
+    public async Task FullOrderFlow_InsufficientCashRejection_DoesNotModifyPortfolio()
     {
         // Arrange
         var initialCash = _portfolio.GetBuyingPower();
         var initialPositionsCount = _portfolio.Positions.Count;
 
         // Act - Try to buy more than we can afford
-        var response = _orderHandler.ProcessOrder(new OrderRequest 
+        var response = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "NVDA", 
             Quantity = 200, 
@@ -232,13 +233,13 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_ProfitableRoundTrip_IncreasesCash()
+    public async Task FullOrderFlow_ProfitableRoundTrip_IncreasesCash()
     {
         // Arrange
         var initialCash = _portfolio.GetBuyingPower();
 
         // Act - Buy low, sell high
-        _orderHandler.ProcessOrder(new OrderRequest 
+        await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "META", 
             Quantity = 10, 
@@ -246,7 +247,7 @@ public class EndToEndOrderFlowTests
             Side = OrderSide.Buy 
         });
         
-        var finalResponse = _orderHandler.ProcessOrder(new OrderRequest 
+        var finalResponse = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "META", 
             Quantity = 10, 
@@ -261,10 +262,10 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_InvalidOrderDoesNotAffectValidOrders()
+    public async Task FullOrderFlow_InvalidOrderDoesNotAffectValidOrders()
     {
         // Arrange
-        var validOrder1 = _orderHandler.ProcessOrder(new OrderRequest 
+        var validOrder1 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "AAPL", 
             Quantity = 10, 
@@ -275,7 +276,7 @@ public class EndToEndOrderFlowTests
         var cashAfterValid = _portfolio.GetBuyingPower();
 
         // Act - Submit invalid order
-        var invalidOrder = _orderHandler.ProcessOrder(new OrderRequest 
+        var invalidOrder = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "INVALID", 
             Quantity = 10, 
@@ -284,7 +285,7 @@ public class EndToEndOrderFlowTests
         });
 
         // Process another valid order
-        var validOrder2 = _orderHandler.ProcessOrder(new OrderRequest 
+        var validOrder2 = await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "GOOGL", 
             Quantity = 5, 
@@ -300,10 +301,10 @@ public class EndToEndOrderFlowTests
     }
 
     [Fact]
-    public void FullOrderFlow_AverageCostCalculation_WorksAcrossMultipleBuys()
+    public async Task FullOrderFlow_AverageCostCalculation_WorksAcrossMultipleBuys()
     {
         // Act
-        _orderHandler.ProcessOrder(new OrderRequest 
+        await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "TSLA", 
             Quantity = 10, 
@@ -311,7 +312,7 @@ public class EndToEndOrderFlowTests
             Side = OrderSide.Buy 
         }); // Executes at 248.75
 
-        _orderHandler.ProcessOrder(new OrderRequest 
+        await _orderHandler.ProcessOrderAsync(new OrderRequest 
         { 
             Symbol = "TSLA", 
             Quantity = 10, 

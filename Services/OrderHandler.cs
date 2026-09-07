@@ -128,6 +128,7 @@ public class OrderHandler : IOrderHandler
             {
                 decimal totalFilledQty = 0;
                 decimal weightedAvgPrice = 0;
+                decimal cashBefore = _portfolioManager.CashBalance;
 
                 foreach (var fill in fills)
                 {
@@ -144,18 +145,22 @@ public class OrderHandler : IOrderHandler
                 }
 
                 var finalPrice = weightedAvgPrice / totalFilledQty;
+                decimal cashAfter = _portfolioManager.CashBalance;
+
                 _logger.LogInformation(
                     "Order {OrderId} executed successfully. Total Qty: {Qty} @ Avg Price: ${Price:N2}",
                     orderId, totalFilledQty, finalPrice);
 
+                // ponytail: Best-effort persistence. We don't await this to keep execution latency low.
+                // internal exception handling in OnTradeExecutedAsync prevents process crashes.
                 _ = _persistenceService.OnTradeExecutedAsync(
                     orderId,
                     order.Symbol,
                     (int)totalFilledQty,
                     finalPrice,
                     order.Side,
-                    _portfolioManager.CashBalance,
-                    _portfolioManager.CashBalance,
+                    cashBefore,
+                    cashAfter,
                     quantResult.Greeks);
 
                 return new OrderResponse
@@ -174,9 +179,6 @@ public class OrderHandler : IOrderHandler
             }
         }
     }
-
-    public OrderResponse ProcessOrder(OrderRequest order) =>
-        ProcessOrderAsync(order).GetAwaiter().GetResult();
 
     private async Task<(bool Success, string ErrorMessage, Greeks Greeks)> PerformQuantCheck(
         OrderRequest order,

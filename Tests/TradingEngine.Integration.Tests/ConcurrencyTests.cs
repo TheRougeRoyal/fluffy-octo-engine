@@ -41,7 +41,7 @@ public class ConcurrencyTests
     }
 
     [Fact]
-    public void ConcurrentBuys_SameSymbol_AllProcessedSuccessfully()
+    public async Task ConcurrentBuys_SameSymbol_AllProcessedSuccessfully()
     {
         // Arrange
         var mockLogger1 = new Mock<ILogger<MarketDataManager>>();
@@ -60,25 +60,22 @@ public class ConcurrencyTests
         var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         var orders = Enumerable.Range(0, 100)
-            .Select(_ => new OrderRequest 
-            { 
-                Symbol = "AAPL", 
-                Quantity = 1, 
-                Price = 200, 
-                Side = OrderSide.Buy 
+            .Select(_ => new OrderRequest
+            {
+                Symbol = "AAPL",
+                Quantity = 1,
+                Price = 200,
+                Side = OrderSide.Buy
             })
             .ToList();
 
         // Act
-        var responses = orders
-            .AsParallel()
-            .Select(o => orderHandler.ProcessOrder(o))
-            .ToList();
+        var responses = await Task.WhenAll(orders.Select(o => orderHandler.ProcessOrderAsync(o)));
 
         // Assert
         var successCount = responses.Count(r => r.Status == OrderStatus.Executed);
         successCount.Should().BeGreaterThan(0);
-        
+
         if (portfolio.Positions.ContainsKey("AAPL"))
         {
             portfolio.Positions["AAPL"].Quantity.Should().Be(successCount);
@@ -106,13 +103,13 @@ public class ConcurrencyTests
 
         // Act - Concurrent orders that total more than available cash
         var tasks = Enumerable.Range(0, 200)
-            .Select(_ => Task.Run(() =>
-                orderHandler.ProcessOrder(new OrderRequest 
-                { 
-                    Symbol = "AAPL", 
-                    Quantity = 10, 
-                    Price = 200, 
-                    Side = OrderSide.Buy 
+            .Select(_ => Task.Run(async () =>
+                await orderHandler.ProcessOrderAsync(new OrderRequest
+                {
+                    Symbol = "AAPL",
+                    Quantity = 10,
+                    Price = 200,
+                    Side = OrderSide.Buy
                 })
             ))
             .ToArray();
@@ -124,7 +121,7 @@ public class ConcurrencyTests
     }
 
     [Fact]
-    public void ConcurrentBuysAndSells_MaintainPortfolioIntegrity()
+    public async Task ConcurrentBuysAndSells_MaintainPortfolioIntegrity()
     {
         // Arrange
         var mockLogger1 = new Mock<ILogger<MarketDataManager>>();
@@ -143,43 +140,40 @@ public class ConcurrencyTests
         var orderHandler = CreateOrderHandler(mockLogger3, portfolio, marketData);
 
         // Pre-populate with shares
-        orderHandler.ProcessOrder(new OrderRequest 
-        { 
-            Symbol = "GOOGL", 
-            Quantity = 200, 
-            Price = 200, 
-            Side = OrderSide.Buy 
+        await orderHandler.ProcessOrderAsync(new OrderRequest
+        {
+            Symbol = "GOOGL",
+            Quantity = 200,
+            Price = 200,
+            Side = OrderSide.Buy
         });
 
         var buyOrders = Enumerable.Range(0, 50)
-            .Select(_ => new OrderRequest 
-            { 
-                Symbol = "GOOGL", 
-                Quantity = 1, 
-                Price = 200, 
-                Side = OrderSide.Buy 
+            .Select(_ => new OrderRequest
+            {
+                Symbol = "GOOGL",
+                Quantity = 1,
+                Price = 200,
+                Side = OrderSide.Buy
             });
 
         var sellOrders = Enumerable.Range(0, 50)
-            .Select(_ => new OrderRequest 
-            { 
-                Symbol = "GOOGL", 
-                Quantity = 1, 
-                Price = 140, 
-                Side = OrderSide.Sell 
+            .Select(_ => new OrderRequest
+            {
+                Symbol = "GOOGL",
+                Quantity = 1,
+                Price = 140,
+                Side = OrderSide.Sell
             });
 
         var allOrders = buyOrders.Concat(sellOrders).ToList();
 
         // Act
-        var responses = allOrders
-            .AsParallel()
-            .Select(o => orderHandler.ProcessOrder(o))
-            .ToList();
+        var responses = await Task.WhenAll(allOrders.Select(o => orderHandler.ProcessOrderAsync(o)));
 
         // Assert
         portfolio.GetBuyingPower().Should().BeGreaterThanOrEqualTo(0);
-        
+
         if (portfolio.Positions.ContainsKey("GOOGL"))
         {
             portfolio.Positions["GOOGL"].Quantity.Should().BeGreaterThanOrEqualTo(0);
@@ -187,7 +181,7 @@ public class ConcurrencyTests
     }
 
     [Fact]
-    public void ConcurrentOrders_DifferentSymbols_AllProcessedCorrectly()
+    public async Task ConcurrentOrders_DifferentSymbols_AllProcessedCorrectly()
     {
         // Arrange
         var mockLogger1 = new Mock<ILogger<MarketDataManager>>();
@@ -208,20 +202,17 @@ public class ConcurrencyTests
         var symbols = new[] { "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA" };
         var orders = symbols
             .SelectMany(symbol => Enumerable.Range(0, 10)
-                .Select(_ => new OrderRequest 
-                { 
-                    Symbol = symbol, 
-                    Quantity = 1, 
-                    Price = 1000, 
-                    Side = OrderSide.Buy 
+                .Select(_ => new OrderRequest
+                {
+                    Symbol = symbol,
+                    Quantity = 1,
+                    Price = 1000,
+                    Side = OrderSide.Buy
                 }))
             .ToList();
 
         // Act
-        var responses = orders
-            .AsParallel()
-            .Select(o => orderHandler.ProcessOrder(o))
-            .ToList();
+        var responses = await Task.WhenAll(orders.Select(o => orderHandler.ProcessOrderAsync(o)));
 
         // Assert
         var executedCount = responses.Count(r => r.Status == OrderStatus.Executed);

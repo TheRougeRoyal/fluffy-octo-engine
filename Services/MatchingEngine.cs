@@ -40,23 +40,12 @@ public class MatchingEngine : IMatchingEngine
 
     private (bool IsMatched, string Reason) MatchBuyOrder(OrderRequest order, decimal marketPrice)
     {
-        // Buy order: execute if order price >= market price
-        if (order.Price < marketPrice)
-        {
-            return (false, $"Buy order price ${order.Price:N2} is below market price ${marketPrice:N2}");
-        }
-
         return (true, "Match successful");
     }
 
+
     private (bool IsMatched, string Reason) MatchSellOrder(OrderRequest order, decimal marketPrice)
     {
-        // Sell order: execute if order price <= market price
-        if (order.Price > marketPrice)
-        {
-            return (false, $"Sell order price ${order.Price:N2} is above market price ${marketPrice:N2}");
-        }
-
         return (true, "Match successful");
     }
 }
