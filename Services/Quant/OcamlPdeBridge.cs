@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,6 +11,7 @@ public class OcamlPdeBridge : IPdeModel
 {
     private readonly ILogger<OcamlPdeBridge> _logger;
     private readonly TradingServerConfig _config;
+    private readonly TimeSpan _timeout = TimeSpan.FromSeconds(5);
 
     public OcamlPdeBridge(ILogger<OcamlPdeBridge> logger, IOptions<TradingServerConfig> config)
     {
@@ -21,40 +21,47 @@ public class OcamlPdeBridge : IPdeModel
 
     public async Task<PdeResponse> GetFairValueAsync(PdeRequest request)
     {
+        if (!File.Exists(_config.PdeBinaryPath))
+        {
+            _logger.LogError("OCaml PDE Binary not found at {Path}", _config.PdeBinaryPath);
+            return new PdeResponse(false, 0, 0, 0, new Greeks(0,0,0,0,0), "PDE Binary missing");
+        }
+
+        var jsonInput = JsonSerializer.Serialize(request);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = _config.PdeBinaryPath,
+            Arguments = "",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process { StartInfo = startInfo };
+        using var cts = new CancellationTokenSource(_timeout);
+
         try
         {
-            if (!File.Exists(_config.PdeBinaryPath))
-            {
-                _logger.LogError("OCaml PDE Binary not found at {Path}", _config.PdeBinaryPath);
-                return new PdeResponse(false, 0, 0, 0, new Greeks(0,0,0,0,0), "PDE Binary missing");
-            }
-
-            var jsonInput = JsonSerializer.Serialize(request);
-
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = _config.PdeBinaryPath,
-                Arguments = "",
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using var process = new Process { StartInfo = startInfo };
-
             process.Start();
 
+            // Write input
             using (var sw = process.StandardInput)
             {
                 await sw.WriteLineAsync(jsonInput);
             }
 
-            string output = await process.StandardOutput.ReadToEndAsync();
-            string error = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+            // Read output with timeout
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            var exitTask = process.WaitForExitAsync(cts.Token);
+
+            await Task.WhenAll(outputTask, errorTask, exitTask).WaitAsync(cts.Token);
+
+            var output = await outputTask;
+            var error = await errorTask;
 
             if (!string.IsNullOrWhiteSpace(error) && string.IsNullOrWhiteSpace(output))
             {
@@ -70,6 +77,12 @@ public class OcamlPdeBridge : IPdeModel
             }
 
             return result;
+        }
+        catch (OperationCanceledException) when (cts.Token.IsCancellationRequested)
+        {
+            _logger.LogError("OCaml PDE Solver timed out after {Timeout}s", _timeout.TotalSeconds);
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return new PdeResponse(false, 0, 0, 0, new Greeks(0,0,0,0,0), $"PDE solver timed out after {_timeout.TotalSeconds}s");
         }
         catch (Exception ex)
         {

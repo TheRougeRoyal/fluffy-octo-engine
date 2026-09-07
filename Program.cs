@@ -36,7 +36,7 @@ class Program
         builder.Services.AddDbContext<TradingDbContext>(options =>
             options.UseNpgsql(ToPostgresConnectionString(databaseUrl)));
 
-        // Repositories
+        // Repositories (scoped — resolved inside PersistenceService's per-operation scope)
         builder.Services.AddScoped<ITradeRepository, TradeRepository>();
         builder.Services.AddScoped<IPortfolioSnapshotRepository, PortfolioSnapshotRepository>();
         builder.Services.AddScoped<IPerformanceMetricsRepository, PerformanceMetricsRepository>();
@@ -58,8 +58,8 @@ class Program
         // Quant Services
         builder.Services.AddSingleton<IPdeModel, OcamlPdeBridge>();
 
-        // Persistence Service
-        builder.Services.AddScoped<IPersistenceService, PersistenceService>();
+        // Persistence Service (singleton — creates own scope per operation via IServiceScopeFactory)
+        builder.Services.AddSingleton<IPersistenceService, PersistenceService>();
 
         // Register services as singletons.
         // Single-instance by design: the order book and portfolio state are held in memory for

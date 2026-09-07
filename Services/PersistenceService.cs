@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TradingEngine.Data.Models;
 using TradingEngine.Data.Repositories;
@@ -21,22 +22,16 @@ public interface IPersistenceService
 
 public class PersistenceService : IPersistenceService
 {
-    private readonly ITradeRepository _tradeRepository;
-    private readonly IPortfolioSnapshotRepository _snapshotRepository;
-    private readonly IPerformanceMetricsRepository _metricsRepository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IMarketDataManager _marketDataManager;
     private readonly ILogger<PersistenceService> _logger;
 
     public PersistenceService(
-        ITradeRepository tradeRepository,
-        IPortfolioSnapshotRepository snapshotRepository,
-        IPerformanceMetricsRepository metricsRepository,
+        IServiceScopeFactory scopeFactory,
         IMarketDataManager marketDataManager,
         ILogger<PersistenceService> logger)
     {
-        _tradeRepository = tradeRepository;
-        _snapshotRepository = snapshotRepository;
-        _metricsRepository = metricsRepository;
+        _scopeFactory = scopeFactory;
         _marketDataManager = marketDataManager;
         _logger = logger;
     }
@@ -44,6 +39,9 @@ public class PersistenceService : IPersistenceService
     public async Task OnTradeExecutedAsync(string orderId, string symbol, int quantity,
         decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter, Greeks greeks)
     {
+        using var scope = _scopeFactory.CreateScope();
+        var tradeRepository = scope.ServiceProvider.GetRequiredService<ITradeRepository>();
+
         try
         {
             var trade = new TradeEntity
@@ -63,7 +61,7 @@ public class PersistenceService : IPersistenceService
                 Rho = greeks.Rho
             };
 
-            await _tradeRepository.SaveTradeAsync(trade);
+            await tradeRepository.SaveTradeAsync(trade);
             _logger.LogInformation($"Trade persisted with Greeks: {orderId}");
         }
         catch (Exception ex)
@@ -75,6 +73,9 @@ public class PersistenceService : IPersistenceService
 
     public async Task SavePortfolioSnapshotAsync(decimal cash, Dictionary<string, Position> positions)
     {
+        using var scope = _scopeFactory.CreateScope();
+        var snapshotRepository = scope.ServiceProvider.GetRequiredService<IPortfolioSnapshotRepository>();
+
         try
         {
             var snapshot = new PortfolioSnapshotEntity
@@ -91,7 +92,7 @@ public class PersistenceService : IPersistenceService
                 }).ToList()
             };
 
-            await _snapshotRepository.SaveSnapshotAsync(snapshot);
+            await snapshotRepository.SaveSnapshotAsync(snapshot);
             _logger.LogInformation($"Portfolio snapshot saved");
         }
         catch (Exception ex)
@@ -103,12 +104,15 @@ public class PersistenceService : IPersistenceService
 
     public async Task CalculateAndSaveMetricsAsync()
     {
+        using var scope = _scopeFactory.CreateScope();
+        var metricsRepository = scope.ServiceProvider.GetRequiredService<IPerformanceMetricsRepository>();
+
         try
         {
             var yesterday = DateTime.UtcNow.AddDays(-1);
             var today = DateTime.UtcNow;
-            var metrics = await _metricsRepository.CalculateMetricsAsync(yesterday, today);
-            await _metricsRepository.SaveMetricsAsync(metrics);
+            var metrics = await metricsRepository.CalculateMetricsAsync(yesterday, today);
+            await metricsRepository.SaveMetricsAsync(metrics);
             _logger.LogInformation("Performance metrics calculated and saved");
         }
         catch (Exception ex)
@@ -118,6 +122,10 @@ public class PersistenceService : IPersistenceService
         }
     }
 
-    public Task<bool> TradeExistsAsync(string orderId) =>
-        _tradeRepository.TradeExistsAsync(orderId);
+    public async Task<bool> TradeExistsAsync(string orderId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var tradeRepository = scope.ServiceProvider.GetRequiredService<ITradeRepository>();
+        return await tradeRepository.TradeExistsAsync(orderId);
+    }
 }
