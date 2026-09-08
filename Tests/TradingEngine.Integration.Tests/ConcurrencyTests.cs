@@ -16,13 +16,25 @@ public class ConcurrencyTests
     private static OrderHandler CreateOrderHandler(
         Mock<ILogger<OrderHandler>> logger,
         IPortfolioManager portfolio,
-        IMarketDataManager marketData)
+        IMarketDataManager marketData,
+        Mock<IPdeModel>? pdeModel = null,
+        Mock<ILimitOrderBook>? orderBook = null)
     {
-        var orderBook = new Mock<ILimitOrderBook>();
-        var pdeModel = new Mock<IPdeModel>();
-        pdeModel
-            .Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
-            .ReturnsAsync(new PdeResponse(true, 100, 100, 0, new Greeks(0, 0, 0, 0, 0), string.Empty));
+        var suppliedOrderBook = orderBook is not null;
+        orderBook ??= new Mock<ILimitOrderBook>();
+        if (!suppliedOrderBook)
+        {
+            orderBook
+                .Setup(book => book.MatchIteratively(It.IsAny<OrderRequest>()))
+                .Returns(new[] { (100m, 1) });
+        }
+        if (pdeModel is null)
+        {
+            pdeModel = new Mock<IPdeModel>();
+            pdeModel
+                .Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
+                .ReturnsAsync(new PdeResponse(true, 100, 100, 0, new Greeks(0, 0, 0, 0, 0), string.Empty));
+        }
         var risk = new Mock<IRiskManagementService>();
         risk.Setup(r => r.ValidateOrder(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
             .Returns((true, string.Empty));
@@ -241,16 +253,16 @@ public class ConcurrencyTests
 
         // Act - Submit 1000 concurrent orders
         var tasks = Enumerable.Range(0, 1000)
-            .Select(i => Task.Run(() =>
+            .Select(i => Task.Run(async () =>
             {
                 var symbols = new[] { "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA" };
                 var symbol = symbols[i % symbols.Length];
-                return orderHandler.ProcessOrder(new OrderRequest 
-                { 
-                    Symbol = symbol, 
-                    Quantity = 1, 
-                    Price = 1000, 
-                    Side = OrderSide.Buy 
+                return await orderHandler.ProcessOrderAsync(new OrderRequest
+                {
+                    Symbol = symbol,
+                    Quantity = 1,
+                    Price = 1000,
+                    Side = OrderSide.Buy
                 });
             }))
             .ToArray();
@@ -260,7 +272,7 @@ public class ConcurrencyTests
         // Assert
         portfolio.GetBuyingPower().Should().BeGreaterThanOrEqualTo(0);
         responses.Should().NotContainNulls();
-        responses.Should().AllSatisfy(r => 
+        responses.Should().AllSatisfy(r =>
         {
             r.OrderId.Should().NotBeNullOrEmpty();
             r.Status.Should().BeOneOf(OrderStatus.Executed, OrderStatus.Rejected);
@@ -268,7 +280,7 @@ public class ConcurrencyTests
     }
 
     [Fact]
-    public void SequentialOrders_ProduceDeterministicResults()
+    public async Task SequentialOrders_ProduceDeterministicResults()
     {
         // Arrange
         var mockLogger1 = new Mock<ILogger<MarketDataManager>>();
@@ -290,12 +302,12 @@ public class ConcurrencyTests
         var responses1 = new List<OrderResponse>();
         for (int i = 0; i < 10; i++)
         {
-            responses1.Add(orderHandler.ProcessOrder(new OrderRequest 
-            { 
-                Symbol = "AAPL", 
-                Quantity = 1, 
-                Price = 200, 
-                Side = OrderSide.Buy 
+            responses1.Add(await orderHandler.ProcessOrderAsync(new OrderRequest
+            {
+                Symbol = "AAPL",
+                Quantity = 1,
+                Price = 200,
+                Side = OrderSide.Buy
             }));
         }
 
@@ -309,12 +321,12 @@ public class ConcurrencyTests
         var responses2 = new List<OrderResponse>();
         for (int i = 0; i < 10; i++)
         {
-            responses2.Add(orderHandler2.ProcessOrder(new OrderRequest 
-            { 
-                Symbol = "AAPL", 
-                Quantity = 1, 
-                Price = 200, 
-                Side = OrderSide.Buy 
+            responses2.Add(await orderHandler2.ProcessOrderAsync(new OrderRequest
+            {
+                Symbol = "AAPL",
+                Quantity = 1,
+                Price = 200,
+                Side = OrderSide.Buy
             }));
         }
 
@@ -324,7 +336,7 @@ public class ConcurrencyTests
         // Assert - Should produce identical results
         cash1.Should().Be(cash2);
         position1Quantity.Should().Be(position2Quantity);
-        
+
         for (int i = 0; i < responses1.Count; i++)
         {
             responses1[i].Status.Should().Be(responses2[i].Status);
@@ -396,7 +408,7 @@ public class ConcurrencyTests
         var finalCash = portfolio.GetBuyingPower();
         finalCash.Should().BeLessThan(initialCash);
         finalCash.Should().BeGreaterThanOrEqualTo(0);
-        
+
         // All positions should have positive quantities
         foreach (var position in portfolio.Positions.Values)
         {
@@ -405,7 +417,127 @@ public class ConcurrencyTests
     }
 
     [Fact]
-    public void ConcurrentMixedOperations_BuysAndSells_MaintsConsistency()
+    public async Task PerSymbolLocks_AllowDifferentSymbolsInParallel_ButSerializeSameSymbol()
+    {
+        var config = Options.Create(new TradingServerConfig
+        {
+            InitialCashBalance = 100000m,
+            Port = 5000,
+            TradeableSymbols = new List<string> { "AAPL", "GOOGL" }
+        });
+
+        var marketData = new MarketDataManager(
+            new Mock<ILogger<MarketDataManager>>().Object,
+            config);
+        var portfolio = new PortfolioManager(
+            new Mock<ILogger<PortfolioManager>>().Object,
+            config);
+        var slowCallStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var pdeCallCount = 0;
+        var pdeModel = new Mock<IPdeModel>();
+        pdeModel
+            .Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
+            .Returns((PdeRequest _) => Task.Run(async () =>
+            {
+                if (Interlocked.Increment(ref pdeCallCount) == 1)
+                {
+                    slowCallStarted.SetResult(true);
+                    await Task.Delay(500);
+                }
+
+                return new PdeResponse(true, 100, 100, 0, new Greeks(0, 0, 0, 0, 0), string.Empty);
+            }));
+        var orderHandler = CreateOrderHandler(
+            new Mock<ILogger<OrderHandler>>(),
+            portfolio,
+            marketData,
+            pdeModel);
+
+        var slowSymbolTask = orderHandler.ProcessOrderAsync(new OrderRequest
+        {
+            Symbol = "AAPL",
+            Quantity = 1,
+            Price = 100,
+            Side = OrderSide.Buy,
+            OrderType = OrderType.Market
+        });
+        await slowCallStarted.Task;
+
+        var fastSymbolTask = orderHandler.ProcessOrderAsync(new OrderRequest
+        {
+            Symbol = "GOOGL",
+            Quantity = 1,
+            Price = 100,
+            Side = OrderSide.Buy,
+            OrderType = OrderType.Market
+        });
+
+        var firstCompleted = await Task.WhenAny(slowSymbolTask, fastSymbolTask);
+        firstCompleted.Should().BeSameAs(fastSymbolTask);
+        slowSymbolTask.IsCompleted.Should().BeFalse();
+        (await fastSymbolTask).Status.Should().Be(OrderStatus.Executed);
+        (await slowSymbolTask).Status.Should().Be(OrderStatus.Executed);
+
+        var activeMatches = 0;
+        var maximumActiveMatches = 0;
+        var orderBook = new Mock<ILimitOrderBook>();
+        orderBook
+            .Setup(book => book.MatchIteratively(It.IsAny<OrderRequest>()))
+            .Returns(() =>
+            {
+                var active = Interlocked.Increment(ref activeMatches);
+                InterlockedMax(ref maximumActiveMatches, active);
+                Thread.Sleep(100);
+                Interlocked.Decrement(ref activeMatches);
+                return new[] { (100m, 1) };
+            });
+        var sameSymbolPde = new Mock<IPdeModel>();
+        sameSymbolPde
+            .Setup(p => p.GetFairValueAsync(It.IsAny<PdeRequest>()))
+            .Returns((PdeRequest _) => Task.Run(async () =>
+            {
+                await Task.Delay(100);
+                return new PdeResponse(true, 100, 100, 0, new Greeks(0, 0, 0, 0, 0), string.Empty);
+            }));
+        var sameSymbolHandler = CreateOrderHandler(
+            new Mock<ILogger<OrderHandler>>(),
+            portfolio,
+            marketData,
+            sameSymbolPde,
+            orderBook);
+
+        var sameSymbolTasks = Enumerable.Range(0, 2)
+            .Select(_ => sameSymbolHandler.ProcessOrderAsync(new OrderRequest
+            {
+                Symbol = "AAPL",
+                Quantity = 1,
+                Price = 100,
+                Side = OrderSide.Buy,
+                OrderType = OrderType.Limit
+            }))
+            .ToArray();
+
+        await Task.WhenAll(sameSymbolTasks);
+        maximumActiveMatches.Should().Be(1);
+    }
+
+    private static void InterlockedMax(ref int location, int value)
+    {
+        int current;
+        do
+        {
+            current = Volatile.Read(ref location);
+            if (value <= current)
+            {
+                return;
+            }
+        }
+        while (Interlocked.CompareExchange(ref location, value, current) != current);
+    }
+
+    [Fact]
+    public async Task ConcurrentMixedOperations_BuysAndSells_MaintsConsistency()
     {
         // Arrange
         var mockLogger1 = new Mock<ILogger<MarketDataManager>>();
@@ -426,12 +558,12 @@ public class ConcurrencyTests
         // Pre-populate portfolio
         for (int i = 0; i < 3; i++)
         {
-            orderHandler.ProcessOrder(new OrderRequest 
-            { 
-                Symbol = "AAPL", 
-                Quantity = 100, 
-                Price = 1000, 
-                Side = OrderSide.Buy 
+            await orderHandler.ProcessOrderAsync(new OrderRequest
+            {
+                Symbol = "AAPL",
+                Quantity = 100,
+                Price = 1000,
+                Side = OrderSide.Buy
             });
         }
 
@@ -440,41 +572,41 @@ public class ConcurrencyTests
 
         // Act - Mix of buys and sells concurrently
         var tasks = Enumerable.Range(0, 100)
-            .Select(i => Task.Run(() =>
+            .Select(i => Task.Run(async () =>
             {
                 if (i % 2 == 0)
                 {
-                    return orderHandler.ProcessOrder(new OrderRequest 
-                    { 
-                        Symbol = "AAPL", 
-                        Quantity = 1, 
-                        Price = 200, 
-                        Side = OrderSide.Buy 
+                    return await orderHandler.ProcessOrderAsync(new OrderRequest
+                    {
+                        Symbol = "AAPL",
+                        Quantity = 1,
+                        Price = 200,
+                        Side = OrderSide.Buy
                     });
                 }
                 else
                 {
-                    return orderHandler.ProcessOrder(new OrderRequest 
-                    { 
-                        Symbol = "AAPL", 
-                        Quantity = 1, 
-                        Price = 170, 
-                        Side = OrderSide.Sell 
+                    return await orderHandler.ProcessOrderAsync(new OrderRequest
+                    {
+                        Symbol = "AAPL",
+                        Quantity = 1,
+                        Price = 170,
+                        Side = OrderSide.Sell
                     });
                 }
             }))
             .ToArray();
 
-        var responses = Task.WhenAll(tasks).Result;
+        var responses = await Task.WhenAll(tasks);
 
         // Assert
         portfolio.Positions["AAPL"].Quantity.Should().BeGreaterThan(0);
         portfolio.GetBuyingPower().Should().BeGreaterThanOrEqualTo(0);
-        
+
         // Verify consistency - total value should make sense
         var currentPositionValue = portfolio.Positions.Values
             .Sum(p => p.Quantity * p.AverageCost);
-        
+
         (portfolio.GetBuyingPower() + currentPositionValue).Should().BeLessThanOrEqualTo(300000m);
     }
 
@@ -499,11 +631,11 @@ public class ConcurrencyTests
 
         // Simulate 7 concurrent clients, each sending 30 orders
         var clientTasks = Enumerable.Range(0, 7)
-            .Select(clientId => Task.Run(() =>
+            .Select(clientId => Task.Run(async () =>
             {
                 var orders = Enumerable.Range(0, 30)
-                    .Select(orderIdx => new OrderRequest 
-                    { 
+                    .Select(orderIdx => new OrderRequest
+                    {
                         Symbol = new[] { "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA" }[clientId],
                         Quantity = (orderIdx % 5) + 1,
                         Price = 1000,
@@ -511,26 +643,24 @@ public class ConcurrencyTests
                     })
                     .ToList();
 
-                return orders
-                    .Select(o => orderHandler.ProcessOrder(o))
-                    .ToList();
+                return await Task.WhenAll(orders.Select(o => orderHandler.ProcessOrderAsync(o)));
             }))
             .ToArray();
 
         var allResponses = await Task.WhenAll(clientTasks);
 
         // Assert
-        var totalOrders = allResponses.Sum(r => r.Count);
+        var totalOrders = allResponses.Sum(r => r.Length);
         totalOrders.Should().Be(210);
 
         portfolio.GetBuyingPower().Should().BeGreaterThanOrEqualTo(0);
-        
+
         var executedOrders = allResponses.SelectMany(r => r).Count(r => r.Status == OrderStatus.Executed);
         executedOrders.Should().BeGreaterThan(0);
     }
 
     [Fact]
-    public void ConcurrentInvalidOperations_NoCorruption()
+    public async Task ConcurrentInvalidOperations_NoCorruption()
     {
         // Arrange
         var mockLogger1 = new Mock<ILogger<MarketDataManager>>();
@@ -552,48 +682,49 @@ public class ConcurrencyTests
 
         // Act - Mix of valid and invalid orders concurrently
         var tasks = Enumerable.Range(0, 200)
-            .Select(i => Task.Run(() =>
+            .Select(i => Task.Run(async () =>
             {
                 if (i % 3 == 0)
                 {
                     // Invalid symbol
-                    return orderHandler.ProcessOrder(new OrderRequest 
-                    { 
-                        Symbol = "INVALID", 
-                        Quantity = 10, 
-                        Price = 100, 
-                        Side = OrderSide.Buy 
+                    return await orderHandler.ProcessOrderAsync(new OrderRequest
+                    {
+                        Symbol = "INVALID",
+                        Quantity = 10,
+                        Price = 100,
+                        Side = OrderSide.Buy
                     });
                 }
                 else if (i % 3 == 1)
                 {
                     // Invalid quantity
-                    return orderHandler.ProcessOrder(new OrderRequest 
-                    { 
-                        Symbol = "AAPL", 
-                        Quantity = 0, 
-                        Price = 100, 
-                        Side = OrderSide.Buy 
+                    return await orderHandler.ProcessOrderAsync(new OrderRequest
+                    {
+                        Symbol = "AAPL",
+                        Quantity = 0,
+                        Price = 100,
+                        Side = OrderSide.Buy
                     });
                 }
                 else
                 {
                     // Valid order
-                    return orderHandler.ProcessOrder(new OrderRequest 
-                    { 
-                        Symbol = "AAPL", 
-                        Quantity = 1, 
-                        Price = 200, 
-                        Side = OrderSide.Buy 
+                    return await orderHandler.ProcessOrderAsync(new OrderRequest
+                    {
+                        Symbol = "AAPL",
+                        Quantity = 1,
+                        Price = 200,
+                        Side = OrderSide.Buy
                     });
                 }
             }))
             .ToArray();
 
-        var responses = Task.WaitAll(tasks, TimeSpan.FromSeconds(10));
+        var allTasks = Task.WhenAll(tasks);
+        var completed = await Task.WhenAny(allTasks, Task.Delay(TimeSpan.FromSeconds(10)));
 
         // Assert
-        responses.Should().BeTrue();
+        completed.Should().BeSameAs(allTasks);
         portfolio.GetBuyingPower().Should().BeLessThanOrEqualTo(initialCash);
         portfolio.GetBuyingPower().Should().BeGreaterThanOrEqualTo(0);
     }
