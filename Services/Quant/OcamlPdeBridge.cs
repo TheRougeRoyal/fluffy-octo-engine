@@ -50,7 +50,7 @@ public class OcamlPdeBridge : IPdeModel
             // Write input
             using (var sw = process.StandardInput)
             {
-                await sw.WriteLineAsync(jsonInput).WaitAsync(cts.Token);
+                await sw.WriteLineAsync(jsonInput, cts.Token);
             }
 
             // Read output with timeout
