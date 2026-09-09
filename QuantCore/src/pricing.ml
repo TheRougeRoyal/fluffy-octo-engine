@@ -58,18 +58,17 @@ let price_option ?(n_s=200) ?(n_t=200) ?(scheme=`CN) input =
   
   let grid = Grid.make ~s_min ~s_max ~n_s ~n_t () in
   
-  let (pde_price, error) = Api.price_euro 
-    ~params ~grid ~s0:input.spot ~scheme ~payoff:payoff_kind in
-  
+  let solution = Pde1d.solve_european ~params ~grid ~payoff:payoff_kind ~scheme in
+  let pde_price = Pde1d.interpolate_at ~grid ~values:solution ~s:input.spot in
   let analytic_price = Payoff.analytic_black_scholes payoff_kind
     ~r:input.rate ~sigma:input.volatility ~t:input.maturity
     ~s0:input.spot ~k:input.strike in
+  let error = Float.abs (pde_price -. analytic_price) in
   
   let eps = 0.01 *. input.spot in
   let s_up = input.spot +. eps in
   let s_down = input.spot -. eps in
   
-  let solution = Pde1d.solve_european ~params ~grid ~payoff:payoff_kind ~scheme in
   let price_up = Pde1d.interpolate_at ~grid ~values:solution ~s:s_up in
   let price_down = Pde1d.interpolate_at ~grid ~values:solution ~s:s_down in
   
