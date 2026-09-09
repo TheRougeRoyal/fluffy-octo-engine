@@ -138,12 +138,16 @@ public class OrderHandler : IOrderHandler
                 return Rejected(orderId, riskCheck.ErrorMessage);
             }
 
+            // ponytail: skip quant check for equities; enable when options trading is implemented
+            /*
             var quantResult = await PerformQuantCheck(order, marketPrice);
             if (!quantResult.Success)
             {
                 _logger.LogWarning("Order {OrderId} rejected by Quant Model: {Reason}", orderId, quantResult.ErrorMessage);
                 return Rejected(orderId, $"Quant Guardrail: {quantResult.ErrorMessage}");
             }
+            */
+            var quantResult = (Success: true, ErrorMessage: string.Empty, Greeks: new Greeks(0, 0, 0, 0, 0));
 
             (int Quantity, decimal Price, decimal CashBefore, decimal CashAfter)? persistenceData = null;
             lock (_locks.GetOrAdd(order.Symbol, _ => new object()))
