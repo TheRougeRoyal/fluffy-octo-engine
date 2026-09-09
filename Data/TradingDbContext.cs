@@ -25,6 +25,16 @@ public class TradingDbContext : DbContext
             .HasMaxLength(50);
 
         modelBuilder.Entity<TradeEntity>()
+            .HasIndex(t => t.OrderId)
+            .IsUnique();
+
+        modelBuilder.Entity<TradeEntity>()
+            .HasIndex(t => t.Symbol);
+
+        modelBuilder.Entity<TradeEntity>()
+            .HasIndex(t => t.ExecutedAt);
+
+        modelBuilder.Entity<TradeEntity>()
             .Property(t => t.ExecutedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
