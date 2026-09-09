@@ -40,8 +40,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import TermsOfService from '@/pages/Terms';
+import PrivacyPolicy from '@/pages/Privacy';
+import CookiePolicy from '@/pages/Cookies';
 
-type Page = 'overview' | 'trade' | 'orders' | 'portfolio' | 'activity' | 'settings';
+type Page = 'overview' | 'trade' | 'orders' | 'portfolio' | 'activity' | 'settings' | 'terms' | 'privacy' | 'cookies';
 type ConnectionStatus = 'disconnected' | 'connecting' | 'unauthenticated' | 'connected';
 type OrderSide = 'Buy' | 'Sell';
 type OrderType = 'Market' | 'Limit';
@@ -82,6 +85,9 @@ const pageMeta: Record<Page, { label: string; icon: typeof LayoutDashboard }> = 
   portfolio: { label: 'Portfolio', icon: BarChart3 },
   activity: { label: 'Activity', icon: Activity },
   settings: { label: 'Settings', icon: Settings },
+  terms: { label: 'Terms', icon: ShieldCheck },
+  privacy: { label: 'Privacy', icon: ShieldCheck },
+  cookies: { label: 'Cookies', icon: ShieldCheck },
 };
 
 const defaultOrder = {
@@ -340,6 +346,9 @@ export default function App() {
         {page === 'portfolio' && <PortfolioPanel livePrice={livePrice} setLivePrice={setLivePrice} orders={orders} />}
         {page === 'activity' && <ActivityPanel activity={activity} onClear={() => setActivity([])} />}
         {page === 'settings' && <SettingsPanel user={user} status={status} onConnect={connect} onDisconnect={disconnect} />}
+        {page === 'terms' && <TermsOfService />}
+        {page === 'privacy' && <PrivacyPolicy />}
+        {page === 'cookies' && <CookiePolicy />}
       </main>
     </div>
   );
