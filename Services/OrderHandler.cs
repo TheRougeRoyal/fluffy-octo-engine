@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -51,6 +52,37 @@ public class OrderHandler : IOrderHandler
     }
 
     public async Task<OrderResponse> ProcessOrderAsync(OrderRequest order)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var outcome = "error";
+
+        try
+        {
+            var response = await ProcessOrderCoreAsync(order);
+            outcome = response.Status == OrderStatus.Executed ? "executed" : "rejected";
+            return response;
+        }
+        catch
+        {
+            outcome = "error";
+            throw;
+        }
+        finally
+        {
+            stopwatch.Stop();
+            TradingEngineInstrumentation.OrderProcessingDurationMs.Record(
+                stopwatch.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("symbol", order.Symbol),
+                new KeyValuePair<string, object?>("outcome", outcome));
+            _logger.LogInformation(
+                "Order processing completed for {Symbol} with outcome {Outcome}. DurationMs: {DurationMs}",
+                order.Symbol,
+                outcome,
+                stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private async Task<OrderResponse> ProcessOrderCoreAsync(OrderRequest order)
     {
         var orderId = GenerateOrderId();
 

@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
 using TradingEngine.Data;
 using TradingEngine.Data.Repositories;
@@ -33,8 +35,12 @@ class Program
             throw new InvalidOperationException("DATABASE_URL must be configured for PostgreSQL.");
         }
 
+        var databaseConnectionString = ToPostgresConnectionString(databaseUrl);
         builder.Services.AddDbContext<TradingDbContext>(options =>
-            options.UseNpgsql(ToPostgresConnectionString(databaseUrl)));
+            options.UseNpgsql(databaseConnectionString));
+        builder.Services.AddHealthChecks()
+            .AddNpgSql(databaseConnectionString, name: "postgres")
+            .AddCheck<PdeBinaryHealthCheck>("pde-binary");
 
         // Repositories (scoped — resolved inside PersistenceService's per-operation scope)
         builder.Services.AddScoped<ITradeRepository, TradeRepository>();
@@ -86,8 +92,15 @@ class Program
         // To create a new migration after model changes: dotnet ef migrations add <Name>
         using (var scope = app.Services.CreateScope())
         {
-            var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
-            await db.Database.MigrateAsync();
+            try
+            {
+                var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
+                await db.Database.MigrateAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogError(ex, "Database migrations failed during startup; health checks will report database status");
+            }
         }
 
         app.UseWebSockets();
@@ -129,7 +142,27 @@ class Program
             </html>
             """, "text/html"));
 
-        app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+        app.MapHealthChecks("/health", new HealthCheckOptions
+        {
+            ResponseWriter = async (context, report) =>
+            {
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    status = report.Status.ToString(),
+                    totalDuration = report.TotalDuration,
+                    entries = report.Entries.ToDictionary(
+                        entry => entry.Key,
+                        entry => new
+                        {
+                            status = entry.Value.Status.ToString(),
+                            duration = entry.Value.Duration,
+                            description = entry.Value.Description,
+                            exception = entry.Value.Exception?.Message
+                        })
+                });
+            }
+        });
 
         app.Map("/ws", async context =>
         {
@@ -166,7 +199,12 @@ class Program
             Username = Uri.UnescapeDataString(userInfo[0]),
             Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty,
             Database = uri.AbsolutePath.TrimStart('/'),
-            SslMode = Npgsql.SslMode.Require
+            SslMode = Enum.TryParse<Npgsql.SslMode>(
+                Environment.GetEnvironmentVariable("DATABASE_SSL_MODE"),
+                ignoreCase: true,
+                out var sslMode)
+                ? sslMode
+                : Npgsql.SslMode.Require
         };
 
         return builder.ConnectionString;
