@@ -6,6 +6,7 @@ public class TradeEntity
 {
     public int Id { get; set; }
     public string OrderId { get; set; } = string.Empty;
+    public string? ClientOrderId { get; set; }
     public string Symbol { get; set; } = string.Empty;
     public int Quantity { get; set; }
     public decimal ExecutionPrice { get; set; }

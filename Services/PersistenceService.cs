@@ -13,11 +13,11 @@ namespace TradingEngine.Services;
 
 public interface IPersistenceService
 {
-    Task OnTradeExecutedAsync(string orderId, string symbol, int quantity,
+    Task OnTradeExecutedAsync(string orderId, string? clientOrderId, string symbol, int quantity,
         decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter, Greeks greeks);
     Task SavePortfolioSnapshotAsync(decimal cash, Dictionary<string, Position> positions);
     Task CalculateAndSaveMetricsAsync();
-    Task<bool> TradeExistsAsync(string orderId);
+    Task<bool> TradeExistsByClientOrderIdAsync(string clientOrderId);
 }
 
 public class PersistenceService : IPersistenceService
@@ -36,7 +36,7 @@ public class PersistenceService : IPersistenceService
         _logger = logger;
     }
 
-    public async Task OnTradeExecutedAsync(string orderId, string symbol, int quantity,
+    public async Task OnTradeExecutedAsync(string orderId, string? clientOrderId, string symbol, int quantity,
         decimal executionPrice, OrderSide side, decimal cashBefore, decimal cashAfter, Greeks greeks)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -47,6 +47,7 @@ public class PersistenceService : IPersistenceService
             var trade = new TradeEntity
             {
                 OrderId = orderId,
+                ClientOrderId = clientOrderId,
                 Symbol = symbol,
                 Quantity = quantity,
                 ExecutionPrice = executionPrice,
@@ -122,10 +123,10 @@ public class PersistenceService : IPersistenceService
         }
     }
 
-    public async Task<bool> TradeExistsAsync(string orderId)
+    public async Task<bool> TradeExistsByClientOrderIdAsync(string clientOrderId)
     {
         using var scope = _scopeFactory.CreateScope();
         var tradeRepository = scope.ServiceProvider.GetRequiredService<ITradeRepository>();
-        return await tradeRepository.TradeExistsAsync(orderId);
+        return await tradeRepository.TradeExistsByClientOrderIdAsync(clientOrderId);
     }
 }

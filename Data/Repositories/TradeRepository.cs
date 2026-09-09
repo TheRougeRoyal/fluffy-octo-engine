@@ -53,9 +53,9 @@ public class TradeRepository : ITradeRepository
         return await _context.Trades.CountAsync();
     }
 
-    public async Task<bool> TradeExistsAsync(string orderId)
+    public async Task<bool> TradeExistsByClientOrderIdAsync(string clientOrderId)
     {
-        return await _context.Trades.AnyAsync(t => t.OrderId == orderId);
+        return await _context.Trades.AnyAsync(t => t.ClientOrderId == clientOrderId);
     }
 
     public async Task<decimal> CalculateTotalVolumeAsync(DateTime from, DateTime to)

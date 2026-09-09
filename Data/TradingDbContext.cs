@@ -29,6 +29,15 @@ public class TradingDbContext : DbContext
             .IsUnique();
 
         modelBuilder.Entity<TradeEntity>()
+            .HasIndex(t => t.ClientOrderId)
+            .IsUnique()
+            .HasFilter("\"ClientOrderId\" IS NOT NULL");
+
+        modelBuilder.Entity<TradeEntity>()
+            .Property(t => t.ClientOrderId)
+            .HasMaxLength(50);
+
+        modelBuilder.Entity<TradeEntity>()
             .HasIndex(t => t.Symbol);
 
         modelBuilder.Entity<TradeEntity>()

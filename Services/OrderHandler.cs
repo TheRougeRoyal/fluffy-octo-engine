@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using TradingEngine.DTOs;
 using TradingEngine.Models;
 using TradingEngine.Models.Quant;
@@ -20,6 +22,7 @@ public class OrderHandler : IOrderHandler
     private readonly ILimitOrderBook _orderBook;
     private readonly IRiskManagementService _riskManagementService;
     private readonly ConcurrentDictionary<string, object> _locks = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _clientOrderLocks = new();
     private int _orderCounter;
 
     public OrderHandler(
@@ -61,122 +64,168 @@ public class OrderHandler : IOrderHandler
             return Rejected(orderId, validation.ErrorMessage!);
         }
 
-        decimal marketPrice;
+        var clientOrderId = string.IsNullOrWhiteSpace(order.OrderId) ? null : order.OrderId;
+        if (clientOrderId is not null && await _persistenceService.TradeExistsByClientOrderIdAsync(clientOrderId))
+        {
+            return Rejected(orderId, "Duplicate order: this order was already processed");
+        }
+
+        SemaphoreSlim? clientOrderLock = null;
+        if (clientOrderId is not null)
+        {
+            clientOrderLock = _clientOrderLocks.GetOrAdd(clientOrderId, _ => new SemaphoreSlim(1, 1));
+            await clientOrderLock.WaitAsync();
+        }
+
         try
         {
-            marketPrice = _marketDataManager.GetPrice(order.Symbol);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get market price for {Symbol}", order.Symbol);
-            return Rejected(orderId, $"Failed to get market price: {ex.Message}");
-        }
-
-        var riskCheck = _riskManagementService.ValidateOrder(order, marketPrice);
-        if (!riskCheck.IsValid)
-        {
-            _logger.LogWarning("Order {OrderId} rejected by Risk Management: {Reason}", orderId, riskCheck.ErrorMessage);
-            return Rejected(orderId, riskCheck.ErrorMessage);
-        }
-
-        var quantResult = await PerformQuantCheck(order, marketPrice);
-        if (!quantResult.Success)
-        {
-            _logger.LogWarning("Order {OrderId} rejected by Quant Model: {Reason}", orderId, quantResult.ErrorMessage);
-            return Rejected(orderId, $"Quant Guardrail: {quantResult.ErrorMessage}");
-        }
-
-        lock (_locks.GetOrAdd(order.Symbol, _ => new object()))
-        {
-            var fills = new List<(decimal Price, int Quantity)>();
-
-            if (order.OrderType == OrderType.Limit)
+            if (clientOrderId is not null &&
+                await _persistenceService.TradeExistsByClientOrderIdAsync(clientOrderId))
             {
-                var iterativeFills = _orderBook.MatchIteratively(order).ToList();
-                if (iterativeFills.Count > 0)
-                {
-                    fills.AddRange(iterativeFills);
-                }
-                else
-                {
-                    _orderBook.AddOrder(order);
-                }
-            }
-            else if (order.OrderType == OrderType.Market)
-            {
-                var matchResult = _matchingEngine.TryMatch(order, marketPrice);
-                if (!matchResult.IsMatched)
-                {
-                    _logger.LogWarning("Market order {OrderId} rejected: {Reason}", orderId, matchResult.Reason);
-                    return Rejected(orderId, matchResult.Reason);
-                }
-
-                fills.Add((marketPrice, order.Quantity));
+                return Rejected(orderId, "Duplicate order: this order was already processed");
             }
 
-            if (fills.Count == 0)
+            decimal marketPrice;
+            try
             {
-                return new OrderResponse
+                marketPrice = _marketDataManager.GetPrice(order.Symbol);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get market price for {Symbol}", order.Symbol);
+                return Rejected(orderId, $"Failed to get market price: {ex.Message}");
+            }
+
+            var riskCheck = _riskManagementService.ValidateOrder(order, marketPrice);
+            if (!riskCheck.IsValid)
+            {
+                _logger.LogWarning("Order {OrderId} rejected by Risk Management: {Reason}", orderId, riskCheck.ErrorMessage);
+                return Rejected(orderId, riskCheck.ErrorMessage);
+            }
+
+            var quantResult = await PerformQuantCheck(order, marketPrice);
+            if (!quantResult.Success)
+            {
+                _logger.LogWarning("Order {OrderId} rejected by Quant Model: {Reason}", orderId, quantResult.ErrorMessage);
+                return Rejected(orderId, $"Quant Guardrail: {quantResult.ErrorMessage}");
+            }
+
+            (int Quantity, decimal Price, decimal CashBefore, decimal CashAfter)? persistenceData = null;
+            lock (_locks.GetOrAdd(order.Symbol, _ => new object()))
+            {
+                var fills = new List<(decimal Price, int Quantity)>();
+
+                if (order.OrderType == OrderType.Limit)
                 {
-                    OrderId = orderId,
-                    Status = OrderStatus.Pending,
-                    Message = "Order added to book"
-                };
+                    var iterativeFills = _orderBook.MatchIteratively(order).ToList();
+                    if (iterativeFills.Count > 0)
+                    {
+                        fills.AddRange(iterativeFills);
+                    }
+                    else
+                    {
+                        _orderBook.AddOrder(order);
+                    }
+                }
+                else if (order.OrderType == OrderType.Market)
+                {
+                    var matchResult = _matchingEngine.TryMatch(order, marketPrice);
+                    if (!matchResult.IsMatched)
+                    {
+                        _logger.LogWarning("Market order {OrderId} rejected: {Reason}", orderId, matchResult.Reason);
+                        return Rejected(orderId, matchResult.Reason);
+                    }
+
+                    fills.Add((marketPrice, order.Quantity));
+                }
+
+                if (fills.Count == 0)
+                {
+                    return new OrderResponse
+                    {
+                        OrderId = orderId,
+                        Status = OrderStatus.Pending,
+                        Message = "Order added to book"
+                    };
+                }
+
+                try
+                {
+                    decimal totalFilledQty = 0;
+                    decimal weightedAvgPrice = 0;
+                    decimal cashBefore = _portfolioManager.CashBalance;
+
+                    foreach (var fill in fills)
+                    {
+                        _tradeExecutor.ExecuteTrade(new OrderRequest
+                        {
+                            Symbol = order.Symbol,
+                            Quantity = fill.Quantity,
+                            Price = fill.Price,
+                            Side = order.Side
+                        }, fill.Price);
+
+                        weightedAvgPrice += fill.Price * fill.Quantity;
+                        totalFilledQty += fill.Quantity;
+                    }
+
+                    var finalPrice = weightedAvgPrice / totalFilledQty;
+                    decimal cashAfter = _portfolioManager.CashBalance;
+
+                    _logger.LogInformation(
+                        "Order {OrderId} executed successfully. Total Qty: {Qty} @ Avg Price: ${Price:N2}",
+                        orderId, totalFilledQty, finalPrice);
+
+                    persistenceData = ((int)totalFilledQty, finalPrice, cashBefore, cashAfter);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to execute order {OrderId}", orderId);
+                    return Rejected(orderId, $"Execution failed: {ex.Message}");
+                }
+            }
+
+            if (persistenceData is null)
+            {
+                return Rejected(orderId, "Execution failed: trade persistence data was not created");
             }
 
             try
             {
-                decimal totalFilledQty = 0;
-                decimal weightedAvgPrice = 0;
-                decimal cashBefore = _portfolioManager.CashBalance;
-
-                foreach (var fill in fills)
-                {
-                    _tradeExecutor.ExecuteTrade(new OrderRequest
-                    {
-                        Symbol = order.Symbol,
-                        Quantity = fill.Quantity,
-                        Price = fill.Price,
-                        Side = order.Side
-                    }, fill.Price);
-
-                    weightedAvgPrice += fill.Price * fill.Quantity;
-                    totalFilledQty += fill.Quantity;
-                }
-
-                var finalPrice = weightedAvgPrice / totalFilledQty;
-                decimal cashAfter = _portfolioManager.CashBalance;
-
-                _logger.LogInformation(
-                    "Order {OrderId} executed successfully. Total Qty: {Qty} @ Avg Price: ${Price:N2}",
-                    orderId, totalFilledQty, finalPrice);
-
-                // ponytail: Best-effort persistence. We don't await this to keep execution latency low.
-                // internal exception handling in OnTradeExecutedAsync prevents process crashes.
-                _ = _persistenceService.OnTradeExecutedAsync(
+                await (_persistenceService.OnTradeExecutedAsync(
                     orderId,
+                    clientOrderId,
                     order.Symbol,
-                    (int)totalFilledQty,
-                    finalPrice,
+                    persistenceData.Value.Quantity,
+                    persistenceData.Value.Price,
                     order.Side,
-                    cashBefore,
-                    cashAfter,
-                    quantResult.Greeks);
+                    persistenceData.Value.CashBefore,
+                    persistenceData.Value.CashAfter,
+                    quantResult.Greeks) ?? Task.CompletedTask);
 
                 return new OrderResponse
                 {
                     OrderId = orderId,
                     Status = OrderStatus.Executed,
-                    ExecutedPrice = finalPrice,
-                    ExecutedQuantity = (int)totalFilledQty,
-                    Message = $"Order executed successfully at avg price ${finalPrice:N2}"
+                    ExecutedPrice = persistenceData.Value.Price,
+                    ExecutedQuantity = persistenceData.Value.Quantity,
+                    Message = $"Order executed successfully at avg price ${persistenceData.Value.Price:N2}"
                 };
+            }
+            catch (Exception ex) when (IsDuplicateClientOrderException(ex))
+            {
+                _logger.LogWarning(ex, "Duplicate client order {ClientOrderId} rejected", clientOrderId);
+                return Rejected(orderId, "Duplicate order: this order was already processed");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to execute order {OrderId}", orderId);
+                _logger.LogError(ex, "Failed to persist order {OrderId}", orderId);
                 return Rejected(orderId, $"Execution failed: {ex.Message}");
             }
+        }
+        finally
+        {
+            clientOrderLock?.Release();
         }
     }
 
@@ -216,6 +265,27 @@ public class OrderHandler : IOrderHandler
             Status = OrderStatus.Rejected,
             Message = message
         };
+
+    private static bool IsDuplicateClientOrderException(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                return true;
+            }
+
+            if (current is DbUpdateException && current.InnerException is PostgresException
+                {
+                    SqlState: PostgresErrorCodes.UniqueViolation
+                })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private string GenerateOrderId() =>
         $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Interlocked.Increment(ref _orderCounter):D6}";

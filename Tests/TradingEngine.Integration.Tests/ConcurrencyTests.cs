@@ -1,4 +1,5 @@
 using Xunit;
+using System.Collections.Concurrent;
 using FluentAssertions;
 using TradingEngine.DTOs;
 using TradingEngine.Models;
@@ -18,7 +19,9 @@ public class ConcurrencyTests
         IPortfolioManager portfolio,
         IMarketDataManager marketData,
         Mock<IPdeModel>? pdeModel = null,
-        Mock<ILimitOrderBook>? orderBook = null)
+        Mock<ILimitOrderBook>? orderBook = null,
+        Mock<IPersistenceService>? persistence = null,
+        Mock<IMatchingEngine>? matchingEngine = null)
     {
         var suppliedOrderBook = orderBook is not null;
         orderBook ??= new Mock<ILimitOrderBook>();
@@ -27,6 +30,14 @@ public class ConcurrencyTests
             orderBook
                 .Setup(book => book.MatchIteratively(It.IsAny<OrderRequest>()))
                 .Returns(new[] { (100m, 1) });
+        }
+        var suppliedMatchingEngine = matchingEngine is not null;
+        matchingEngine ??= new Mock<IMatchingEngine>();
+        if (!suppliedMatchingEngine)
+        {
+            matchingEngine
+                .Setup(engine => engine.TryMatch(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
+                .Returns((true, "Match successful"));
         }
         if (pdeModel is null)
         {
@@ -38,18 +49,148 @@ public class ConcurrencyTests
         var risk = new Mock<IRiskManagementService>();
         risk.Setup(r => r.ValidateOrder(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
             .Returns((true, string.Empty));
+        persistence ??= new Mock<IPersistenceService>();
 
         return new OrderHandler(
             logger.Object,
             new OrderValidator(marketData),
-            new MatchingEngine(portfolio, orderBook.Object),
+            matchingEngine.Object,
             new TradeExecutor(new Mock<ILogger<TradeExecutor>>().Object, portfolio),
             marketData,
-            new Mock<IPersistenceService>().Object,
+            persistence.Object,
             pdeModel.Object,
             portfolio,
             orderBook.Object,
             risk.Object);
+    }
+
+    [Fact]
+    public async Task DuplicateClientOrderId_IsRejectedWithoutAdditionalMutation()
+    {
+        var config = Options.Create(new TradingServerConfig
+        {
+            InitialCashBalance = 100000m,
+            Port = 5000,
+            TradeableSymbols = new List<string> { "AAPL" }
+        });
+        var marketData = new MarketDataManager(new Mock<ILogger<MarketDataManager>>().Object, config);
+        var portfolio = new PortfolioManager(new Mock<ILogger<PortfolioManager>>().Object, config);
+        var matchingEngine = new Mock<IMatchingEngine>();
+        matchingEngine
+            .Setup(engine => engine.TryMatch(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
+            .Returns((true, "Match successful"));
+        var persistedClientOrderIds = new ConcurrentDictionary<string, byte>();
+        var persistence = new Mock<IPersistenceService>();
+        persistence
+            .Setup(service => service.TradeExistsByClientOrderIdAsync(It.IsAny<string>()))
+            .ReturnsAsync((string clientOrderId) => persistedClientOrderIds.ContainsKey(clientOrderId));
+        persistence
+            .Setup(service => service.OnTradeExecutedAsync(
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<decimal>(),
+                It.IsAny<OrderSide>(),
+                It.IsAny<decimal>(),
+                It.IsAny<decimal>(),
+                It.IsAny<Greeks>()))
+            .Callback<string, string?, string, int, decimal, OrderSide, decimal, decimal, Greeks>(
+                (_, clientOrderId, _, _, _, _, _, _, _) => persistedClientOrderIds.TryAdd(clientOrderId!, 0))
+            .Returns(Task.CompletedTask);
+        var handler = CreateOrderHandler(
+            new Mock<ILogger<OrderHandler>>(),
+            portfolio,
+            marketData,
+            persistence: persistence,
+            matchingEngine: matchingEngine);
+        var order = new OrderRequest
+        {
+            OrderId = "client-order-1",
+            Symbol = "AAPL",
+            Quantity = 1,
+            Price = 100,
+            Side = OrderSide.Buy,
+            OrderType = OrderType.Market
+        };
+
+        var firstResponse = await handler.ProcessOrderAsync(order);
+        var secondResponse = await handler.ProcessOrderAsync(order);
+
+        firstResponse.Status.Should().Be(OrderStatus.Executed);
+        secondResponse.Status.Should().Be(OrderStatus.Rejected);
+        secondResponse.Message.Should().Contain("Duplicate order");
+        portfolio.Positions["AAPL"].Quantity.Should().Be(1);
+        persistedClientOrderIds.Should().ContainSingle();
+        matchingEngine.Verify(engine => engine.TryMatch(It.IsAny<OrderRequest>(), It.IsAny<decimal>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DuplicateClientOrderId_ConcurrentSubmissionsOnlyExecuteOnce()
+    {
+        var config = Options.Create(new TradingServerConfig
+        {
+            InitialCashBalance = 100000m,
+            Port = 5000,
+            TradeableSymbols = new List<string> { "AAPL" }
+        });
+        var marketData = new MarketDataManager(new Mock<ILogger<MarketDataManager>>().Object, config);
+        var portfolio = new PortfolioManager(new Mock<ILogger<PortfolioManager>>().Object, config);
+        var matchingEngine = new Mock<IMatchingEngine>();
+        matchingEngine
+            .Setup(engine => engine.TryMatch(It.IsAny<OrderRequest>(), It.IsAny<decimal>()))
+            .Returns((true, "Match successful"));
+        var persistedClientOrderIds = new ConcurrentDictionary<string, byte>();
+        var persistence = new Mock<IPersistenceService>();
+        persistence
+            .Setup(service => service.TradeExistsByClientOrderIdAsync(It.IsAny<string>()))
+            .ReturnsAsync((string clientOrderId) => persistedClientOrderIds.ContainsKey(clientOrderId));
+        persistence
+            .Setup(service => service.OnTradeExecutedAsync(
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<decimal>(),
+                It.IsAny<OrderSide>(),
+                It.IsAny<decimal>(),
+                It.IsAny<decimal>(),
+                It.IsAny<Greeks>()))
+            .Callback<string, string?, string, int, decimal, OrderSide, decimal, decimal, Greeks>(
+                (_, clientOrderId, _, _, _, _, _, _, _) => persistedClientOrderIds.TryAdd(clientOrderId!, 0))
+            .Returns(Task.CompletedTask);
+        var handler = CreateOrderHandler(
+            new Mock<ILogger<OrderHandler>>(),
+            portfolio,
+            marketData,
+            persistence: persistence,
+            matchingEngine: matchingEngine);
+        var order = new OrderRequest
+        {
+            OrderId = "client-order-concurrent",
+            Symbol = "AAPL",
+            Quantity = 1,
+            Price = 100,
+            Side = OrderSide.Buy,
+            OrderType = OrderType.Market
+        };
+        var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var submissions = Enumerable.Range(0, 2)
+            .Select(_ => Task.Run(async () =>
+            {
+                await start.Task;
+                return await handler.ProcessOrderAsync(order);
+            }))
+            .ToArray();
+
+        start.SetResult(true);
+        var responses = await Task.WhenAll(submissions);
+
+        responses.Count(response => response.Status == OrderStatus.Executed).Should().Be(1);
+        responses.Count(response => response.Status == OrderStatus.Rejected).Should().Be(1);
+        portfolio.Positions["AAPL"].Quantity.Should().Be(1);
+        persistedClientOrderIds.Should().ContainSingle();
+        matchingEngine.Verify(engine => engine.TryMatch(It.IsAny<OrderRequest>(), It.IsAny<decimal>()), Times.Once);
     }
 
     [Fact]

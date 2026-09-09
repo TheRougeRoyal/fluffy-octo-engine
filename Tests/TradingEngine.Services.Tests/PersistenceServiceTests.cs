@@ -9,6 +9,7 @@ using TradingEngine.Services;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TradingEngine.Services.Tests;
 
@@ -23,10 +24,14 @@ public class PersistenceServiceTests
 
     public PersistenceServiceTests()
     {
+        var services = new ServiceCollection();
+        services.AddScoped<ITradeRepository>(_ => _mockTradeRepo.Object);
+        services.AddScoped<IPortfolioSnapshotRepository>(_ => _mockSnapshotRepo.Object);
+        services.AddScoped<IPerformanceMetricsRepository>(_ => _mockMetricsRepo.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
         _service = new PersistenceService(
-            _mockTradeRepo.Object,
-            _mockSnapshotRepo.Object,
-            _mockMetricsRepo.Object,
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             _mockMarketData.Object,
             _mockLogger.Object);
     }
@@ -35,10 +40,11 @@ public class PersistenceServiceTests
     public async Task OnTradeExecutedAsync_CallsTradeRepository()
     {
         // Act
-        await _service.OnTradeExecutedAsync("ORD-1", "AAPL", 10, 150, OrderSide.Buy, 2000, 1500, new TradingEngine.Models.Quant.Greeks(0, 0, 0, 0, 0));
+        await _service.OnTradeExecutedAsync("ORD-1", "CLIENT-1", "AAPL", 10, 150, OrderSide.Buy, 2000, 1500, new TradingEngine.Models.Quant.Greeks(0, 0, 0, 0, 0));
 
         // Assert
-        _mockTradeRepo.Verify(r => r.SaveTradeAsync(It.Is<TradeEntity>(t => t.OrderId == "ORD-1")), Times.Once);
+        _mockTradeRepo.Verify(r => r.SaveTradeAsync(It.Is<TradeEntity>(t =>
+            t.OrderId == "ORD-1" && t.ClientOrderId == "CLIENT-1")), Times.Once);
     }
 
     [Fact]
