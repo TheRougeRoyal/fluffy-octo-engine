@@ -1,5 +1,6 @@
 using Xunit;
 using System.Collections.Concurrent;
+using System.Reflection;
 using FluentAssertions;
 using TradingEngine.DTOs;
 using TradingEngine.Models;
@@ -191,6 +192,47 @@ public class ConcurrencyTests
         portfolio.Positions["AAPL"].Quantity.Should().Be(1);
         persistedClientOrderIds.Should().ContainSingle();
         matchingEngine.Verify(engine => engine.TryMatch(It.IsAny<OrderRequest>(), It.IsAny<decimal>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DistinctClientOrderIds_DoNotRetainDeduplicationLocks()
+    {
+        var config = Options.Create(new TradingServerConfig
+        {
+            InitialCashBalance = 1000000m,
+            Port = 5000,
+            TradeableSymbols = new List<string> { "AAPL" }
+        });
+        var marketData = new MarketDataManager(new Mock<ILogger<MarketDataManager>>().Object, config);
+        var portfolio = new PortfolioManager(new Mock<ILogger<PortfolioManager>>().Object, config);
+        var handler = CreateOrderHandler(
+            new Mock<ILogger<OrderHandler>>(),
+            portfolio,
+            marketData);
+
+        var responses = new List<OrderResponse>();
+        for (var i = 0; i < 1000; i++)
+        {
+            responses.Add(await handler.ProcessOrderAsync(new OrderRequest
+            {
+                OrderId = $"client-order-{i}",
+                Symbol = "AAPL",
+                Quantity = 1,
+                Price = 100,
+                Side = OrderSide.Buy,
+                OrderType = OrderType.Market
+            }));
+        }
+
+        responses.Should().AllSatisfy(response => response.Status.Should().Be(OrderStatus.Executed));
+        var lockDictionary = typeof(OrderHandler)
+            .GetField("_clientOrderLocks", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(handler);
+        var lockCount = (int)lockDictionary!
+            .GetType()
+            .GetProperty("Count")!
+            .GetValue(lockDictionary)!;
+        lockCount.Should().Be(0);
     }
 
     [Fact]

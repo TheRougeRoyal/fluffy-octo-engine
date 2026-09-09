@@ -22,7 +22,8 @@ public class OrderHandler : IOrderHandler
     private readonly ILimitOrderBook _orderBook;
     private readonly IRiskManagementService _riskManagementService;
     private readonly ConcurrentDictionary<string, object> _locks = new();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _clientOrderLocks = new();
+    private readonly ConcurrentDictionary<string, ClientOrderLock> _clientOrderLocks = new();
+    private readonly object _clientOrderLocksGate = new();
     private int _orderCounter;
 
     public OrderHandler(
@@ -70,11 +71,13 @@ public class OrderHandler : IOrderHandler
             return Rejected(orderId, "Duplicate order: this order was already processed");
         }
 
-        SemaphoreSlim? clientOrderLock = null;
+        ClientOrderLock? clientOrderLock = null;
+        var clientOrderLockAcquired = false;
         if (clientOrderId is not null)
         {
-            clientOrderLock = _clientOrderLocks.GetOrAdd(clientOrderId, _ => new SemaphoreSlim(1, 1));
+            clientOrderLock = AcquireClientOrderLock(clientOrderId);
             await clientOrderLock.WaitAsync();
+            clientOrderLockAcquired = true;
         }
 
         try
@@ -225,7 +228,10 @@ public class OrderHandler : IOrderHandler
         }
         finally
         {
-            clientOrderLock?.Release();
+            if (clientOrderId is not null && clientOrderLock is not null)
+            {
+                ReleaseClientOrderLock(clientOrderId, clientOrderLock, clientOrderLockAcquired);
+            }
         }
     }
 
@@ -285,6 +291,56 @@ public class OrderHandler : IOrderHandler
         }
 
         return false;
+    }
+
+    private ClientOrderLock AcquireClientOrderLock(string clientOrderId)
+    {
+        lock (_clientOrderLocksGate)
+        {
+            if (!_clientOrderLocks.TryGetValue(clientOrderId, out var clientOrderLock))
+            {
+                clientOrderLock = new ClientOrderLock();
+                _clientOrderLocks.TryAdd(clientOrderId, clientOrderLock);
+            }
+
+            clientOrderLock.RefCount++;
+            return clientOrderLock;
+        }
+    }
+
+    private void ReleaseClientOrderLock(
+        string clientOrderId,
+        ClientOrderLock clientOrderLock,
+        bool semaphoreAcquired)
+    {
+        lock (_clientOrderLocksGate)
+        {
+            if (semaphoreAcquired)
+            {
+                clientOrderLock.Release();
+            }
+
+            clientOrderLock.RefCount--;
+            if (clientOrderLock.RefCount == 0)
+            {
+                _clientOrderLocks.TryRemove(
+                    new KeyValuePair<string, ClientOrderLock>(clientOrderId, clientOrderLock));
+                clientOrderLock.Dispose();
+            }
+        }
+    }
+
+    private sealed class ClientOrderLock : IDisposable
+    {
+        private readonly SemaphoreSlim _semaphore = new(1, 1);
+
+        public int RefCount { get; set; }
+
+        public Task WaitAsync() => _semaphore.WaitAsync();
+
+        public void Release() => _semaphore.Release();
+
+        public void Dispose() => _semaphore.Dispose();
     }
 
     private string GenerateOrderId() =>
