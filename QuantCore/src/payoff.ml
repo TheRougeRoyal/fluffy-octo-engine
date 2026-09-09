@@ -56,3 +56,24 @@ let analytic_black_scholes option_type ~r ~sigma ~t ~s0 ~k =
         let n_neg_d1 = standard_normal_cdf (-.d1) in
         let n_neg_d2 = standard_normal_cdf (-.d2) in
         k *. discount_factor *. n_neg_d2 -. s0 *. n_neg_d1
+
+let analytic_black_scholes_gamma ~r ~sigma ~t ~s0 ~k =
+  if r < 0.0 then
+    invalid_arg (Printf.sprintf "Risk-free rate must be non-negative, got %g" r);
+  if sigma <= 0.0 then
+    invalid_arg (Printf.sprintf "Volatility must be positive, got %g" sigma);
+  if t < 0.0 then
+    invalid_arg (Printf.sprintf "Time to maturity must be non-negative, got %g" t);
+  if s0 <= 0.0 then
+    invalid_arg (Printf.sprintf "Current asset price must be positive, got %g" s0);
+  if k <= 0.0 then
+    invalid_arg (Printf.sprintf "Strike price must be positive, got %g" k);
+  if not (Float.is_finite r && Float.is_finite sigma && Float.is_finite t && Float.is_finite s0 && Float.is_finite k) then
+    invalid_arg "All parameters must be finite";
+  if t = 0.0 then
+    0.0
+  else
+    let sqrt_t = Float.sqrt t in
+    let d1 = (Float.log (s0 /. k) +. (r +. 0.5 *. sigma *. sigma) *. t) /. (sigma *. sqrt_t) in
+    let density = Float.exp (-.0.5 *. d1 *. d1) /. Float.sqrt (2.0 *. Float.pi) in
+    density /. (s0 *. sigma *. sqrt_t)

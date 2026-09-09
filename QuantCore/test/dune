@@ -1,0 +1,3 @@
+(tests
+ (names quantcore_tests)
+ (libraries pde_opt))

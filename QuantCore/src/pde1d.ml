@@ -2,8 +2,6 @@ let solve_european ~params ~grid ~payoff ~scheme =
   let n_s = grid.Grid.n_s in
   let dt = Grid.dt grid params.Bs_params.t in
   let ds = Grid.ds grid in
-  let theta = Time_stepper.theta scheme in
-  
   let solution = Array.make (n_s + 1) 0.0 in
   for i = 0 to n_s do
     let s_i = Grid.s_at grid i in
@@ -12,9 +10,7 @@ let solve_european ~params ~grid ~payoff ~scheme =
   
   if grid.Grid.n_t = 0 then solution
   else (
-    for time_step = 1 to grid.Grid.n_t do
-      let tau = Float.of_int time_step *. dt in
-      
+    let advance ~step_dt ~tau ~theta =
       if n_s <= 1 then (
         let left_bc = Bcs.left_value payoff ~r:params.Bs_params.r ~k:params.Bs_params.k ~tau in
         let right_bc = Bcs.right_value payoff ~r:params.Bs_params.r ~k:params.Bs_params.k 
@@ -39,12 +35,12 @@ let solve_european ~params ~grid ~payoff ~scheme =
           let beta_i = -. sigma_sq *. s_i *. s_i /. (ds *. ds) -. r in
           let gamma_i = 0.5 *. sigma_sq *. s_i *. s_i /. (ds *. ds) +. 0.5 *. r *. s_i /. ds in
           
-          a.(idx) <- -. theta *. dt *. alpha_i;
-          b.(idx) <- 1.0 -. theta *. dt *. beta_i;
-          c.(idx) <- -. theta *. dt *. gamma_i;
+          a.(idx) <- -. theta *. step_dt *. alpha_i;
+          b.(idx) <- 1.0 -. theta *. step_dt *. beta_i;
+          c.(idx) <- -. theta *. step_dt *. gamma_i;
           
-          let rhs_contrib = 
-            solution.(i) +. (1.0 -. theta) *. dt *. (
+          let rhs_contrib =
+            solution.(i) +. (1.0 -. theta) *. step_dt *. (
               alpha_i *. solution.(i-1) +. beta_i *. solution.(i) +. gamma_i *. solution.(i+1)
             ) in
           d.(idx) <- rhs_contrib;
@@ -65,6 +61,14 @@ let solve_european ~params ~grid ~payoff ~scheme =
         done;
         solution.(n_s) <- right_bc;
       )
+    in
+    for time_step = 1 to grid.Grid.n_t do
+      let tau = Float.of_int time_step *. dt in
+      if scheme = `CN && time_step = 1 then (
+        advance ~step_dt:(0.5 *. dt) ~tau:(0.5 *. dt) ~theta:1.0;
+        advance ~step_dt:(0.5 *. dt) ~tau ~theta:1.0
+      ) else
+        advance ~step_dt:dt ~tau ~theta:(Time_stepper.theta scheme)
     done;
     
     solution
