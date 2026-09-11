@@ -17,6 +17,7 @@ type pricing_output = {
   gamma: float;
   theta: float;
   vega: float;
+  rho: float;
 }
 
 val price_option : ?n_s:int -> ?n_t:int -> ?scheme:[`BE | `CN] -> pricing_input -> pricing_output

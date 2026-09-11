@@ -1,6 +1,6 @@
 (library
  (public_name pde_opt)
  (name pde_opt)
- (modules bs_params grid payoff bcs tridiag time_stepper pde1d api market_data calibration backtesting pricing crypto_model crypto_analytics live_data)
- (libraries yojson)
+ (modules bs_params grid grid_cache payoff bcs tridiag time_stepper pde1d api market_data calibration backtesting pricing implied_vol crypto_model crypto_analytics live_data)
+ (libraries yojson threads)
  (flags (:standard -w -27)))
