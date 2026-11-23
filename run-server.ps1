@@ -13,7 +13,7 @@ Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 
 if (-not $env:DATABASE_URL) {
-    $env:DATABASE_URL = "postgresql://postgres:password@localhost:5432/trading_engine"
+    $env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/trading_engine"
 }
 if (-not $env:DATABASE_SSL_MODE) {
     $env:DATABASE_SSL_MODE = "Disable"
