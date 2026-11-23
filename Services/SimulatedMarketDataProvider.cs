@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using TradingEngine.Services;
 
 namespace TradingEngine.Services;
 
@@ -25,7 +24,7 @@ public class SimulatedMarketDataProvider : IMarketDataProvider
 
     public MarketPrice GetCurrentPrice(string symbol)
     {
-        // ponytail: Simple random walk to simulate movement
+        // Geometric random walk: each tick applies a ±1% perturbation.
         var current = _prices.GetOrAdd(symbol, _ => (decimal)(_random.NextDouble() * 450 + 50));
         var change = (decimal)(_random.NextDouble() * 0.02 - 0.01) * current; // +/- 1%
         var next = current + change;

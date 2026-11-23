@@ -13,11 +13,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="TestClient.cs" />
-    <Compile Include="DTOs\OrderRequest.cs" />
-    <Compile Include="DTOs\OrderResponse.cs" />
-    <Compile Include="Models\OrderSide.cs" />
-    <Compile Include="Models\OrderStatus.cs" />
+    <Compile Include="../DTOs/OrderRequest.cs" />
+    <Compile Include="../DTOs/OrderResponse.cs" />
+    <Compile Include="../Models/OrderSide.cs" />
+    <Compile Include="../Models/OrderStatus.cs" />
+    <Compile Include="../Models/OrderType.cs" />
+    <Compile Include="../Models/TimeInForce.cs" />
   </ItemGroup>
 
 </Project>

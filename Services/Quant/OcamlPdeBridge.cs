@@ -20,6 +20,20 @@ public class OcamlPdeBridge : IPdeModel
         _config = config.Value;
     }
 
+    /// <summary>
+    /// Returns the platform-appropriate path to the PDE binary.
+    /// On Windows, appends ".exe" if the path has no extension.
+    /// </summary>
+    private string ResolveBinaryPath()
+    {
+        var path = _config.PdeBinaryPath;
+        if (OperatingSystem.IsWindows() && string.IsNullOrEmpty(Path.GetExtension(path)))
+        {
+            path += ".exe";
+        }
+        return path;
+    }
+
     public async Task<PdeResponse> GetFairValueAsync(PdeRequest request)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -28,16 +42,17 @@ public class OcamlPdeBridge : IPdeModel
         using var cts = new CancellationTokenSource(_timeout);
         try
         {
-            if (!File.Exists(_config.PdeBinaryPath))
+            var binaryPath = ResolveBinaryPath();
+            if (!File.Exists(binaryPath))
             {
-                _logger.LogError("OCaml PDE Binary not found at {Path}", _config.PdeBinaryPath);
+                _logger.LogError("OCaml PDE Binary not found at {Path}", binaryPath);
                 return new PdeResponse(false, 0, 0, 0, new Greeks(0,0,0,0,0), "PDE Binary missing");
             }
 
             var jsonInput = JsonSerializer.Serialize(request);
             var startInfo = new ProcessStartInfo
             {
-                FileName = _config.PdeBinaryPath,
+                FileName = binaryPath,
                 Arguments = "",
                 UseShellExecute = false,
                 RedirectStandardInput = true,

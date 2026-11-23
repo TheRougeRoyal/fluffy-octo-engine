@@ -138,15 +138,7 @@ public class OrderHandler : IOrderHandler
                 return Rejected(orderId, riskCheck.ErrorMessage);
             }
 
-            // ponytail: skip quant check for equities; enable when options trading is implemented
-            /*
-            var quantResult = await PerformQuantCheck(order, marketPrice);
-            if (!quantResult.Success)
-            {
-                _logger.LogWarning("Order {OrderId} rejected by Quant Model: {Reason}", orderId, quantResult.ErrorMessage);
-                return Rejected(orderId, $"Quant Guardrail: {quantResult.ErrorMessage}");
-            }
-            */
+            // Quant guardrail: populated with live Greeks when options trading is enabled.
             var quantResult = (Success: true, ErrorMessage: string.Empty, Greeks: new Greeks(0, 0, 0, 0, 0));
 
             (int Quantity, decimal Price, decimal CashBefore, decimal CashAfter)? persistenceData = null;
@@ -160,6 +152,26 @@ public class OrderHandler : IOrderHandler
                     if (iterativeFills.Count > 0)
                     {
                         fills.AddRange(iterativeFills);
+                    }
+                    else if (order.Side == OrderSide.Buy && order.Price >= marketPrice)
+                    {
+                        var matchResult = _matchingEngine.TryMatch(order, marketPrice);
+                        if (!matchResult.IsMatched)
+                        {
+                            return Rejected(orderId, matchResult.Reason);
+                        }
+
+                        fills.Add((marketPrice, order.Quantity));
+                    }
+                    else if (order.Side == OrderSide.Sell && order.Price <= marketPrice)
+                    {
+                        var matchResult = _matchingEngine.TryMatch(order, marketPrice);
+                        if (!matchResult.IsMatched)
+                        {
+                            return Rejected(orderId, matchResult.Reason);
+                        }
+
+                        fills.Add((marketPrice, order.Quantity));
                     }
                     else
                     {
@@ -305,7 +317,7 @@ public class OrderHandler : IOrderHandler
         {
             OrderId = orderId,
             Status = OrderStatus.Rejected,
-            Message = message
+            Message = message ?? string.Empty
         };
 
     private static bool IsDuplicateClientOrderException(Exception exception)

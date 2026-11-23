@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: |
+          dotnet restore TradingEngine.csproj
+          dotnet restore Tests/TradingEngine.Services.Tests/TradingEngine.Services.Tests.csproj
+          dotnet restore Tests/TradingEngine.Integration.Tests/TradingEngine.Integration.Tests.csproj
+
+      - name: Build
+        run: dotnet build TradingEngine.csproj --no-restore --configuration Release
+
+      - name: Run service tests
+        run: dotnet test Tests/TradingEngine.Services.Tests/TradingEngine.Services.Tests.csproj --no-restore --configuration Release --verbosity normal
+
+      - name: Run integration tests
+        run: dotnet test Tests/TradingEngine.Integration.Tests/TradingEngine.Integration.Tests.csproj --no-restore --configuration Release --verbosity normal
+
+  build-quantcore:
+    name: Build QuantCore (OCaml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OCaml dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y opam libgmp-dev
+          opam init --bare --yes
+          opam switch create . ocaml-base-compiler --yes || true
+          eval $(opam env)
+          opam install dune yojson --yes
+
+      - name: Build pricing_api
+        run: |
+          eval $(opam env)
+          cd QuantCore
+          dune build bin/pricing_api.exe
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t fluffy-octo-engine:ci .

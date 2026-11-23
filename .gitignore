@@ -1,20 +1,57 @@
-# OCaml / Dune build output
-QuantCore/_build/
-QuantCore/*.install
-QuantCore/.merlin
-QuantCore/.ocamlformat
-QuantCore/.ocamlbin
-
-# .NET
+# ── .NET ──────────────────────────────────────────────────────────────────────
 bin/
 obj/
 *.user
 *.suo
 *.useroscs
 *.sln.docstates
+*.vs/
+.vs/
 
-# Node
+# NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.coverage
+*.coveragexml
+*.trx
+TestResults/
+
+# Publish output
+publish/
+out/
+
+# ── OCaml / Dune ──────────────────────────────────────────────────────────────
+QuantCore/_build/
+QuantCore/*.install
+QuantCore/.merlin
+QuantCore/.ocamlformat
+QuantCore/.ocamlbin
+QuantCore/hello.ml
+
+# Keep the compiled pricing_api binary out of git; it is built in Docker or locally.
+QuantCore/bin/pricing_api
+QuantCore/bin/pricing_api.exe
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
 dist/
 .vercel
 .next
+
+# Environment files (never commit secrets)
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/settings.json

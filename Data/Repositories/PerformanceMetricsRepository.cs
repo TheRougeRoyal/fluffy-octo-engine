@@ -58,9 +58,12 @@ public class PerformanceMetricsRepository : IPerformanceMetricsRepository
         var tradeList = trades.ToList();
         var snapshotList = snapshots.ToList();
 
-        // Calculate returns
-        var startValue = snapshotList.LastOrDefault()?.TotalPortfolioValue ?? 100000;
-        var endValue = snapshotList.FirstOrDefault()?.TotalPortfolioValue ?? 100000;
+        // Calculate returns from the earliest snapshot to the latest snapshot.
+        var orderedSnapshots = snapshotList
+            .OrderBy(snapshot => snapshot.SnapshotTime)
+            .ToList();
+        var startValue = orderedSnapshots.FirstOrDefault()?.TotalPortfolioValue ?? 100000;
+        var endValue = orderedSnapshots.LastOrDefault()?.TotalPortfolioValue ?? 100000;
         var totalReturn = (endValue - startValue) / startValue;
 
         // Calculate drawdown

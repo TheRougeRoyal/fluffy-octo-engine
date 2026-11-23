@@ -1,0 +1,20 @@
+@echo off
+setlocal
+
+echo =========================================
+echo Starting Trading Engine Server
+echo =========================================
+echo.
+
+echo Building project...
+dotnet build TradingEngine.csproj
+if errorlevel 1 (
+    echo.
+    echo Build failed. Please check the error messages above.
+    exit /b 1
+)
+
+echo.
+echo Build successful! Starting server...
+echo.
+dotnet run --project TradingEngine.csproj

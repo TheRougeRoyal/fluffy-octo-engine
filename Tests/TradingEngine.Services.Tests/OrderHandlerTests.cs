@@ -313,7 +313,7 @@ public class OrderHandlerTests
     #region Matching Failures
 
     [Fact]
-    public async Task ProcessOrder_BuyBelowMarketPrice_ReturnsRejected()
+    public async Task ProcessOrder_BuyBelowMarketPrice_AddsToBook()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -330,12 +330,12 @@ public class OrderHandlerTests
         var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
-        response.Status.Should().Be(OrderStatus.Rejected);
-        response.Message.Should().Contain("below market price");
+        response.Status.Should().Be(OrderStatus.Pending);
+        response.Message.Should().Contain("added to book");
     }
 
     [Fact]
-    public async Task ProcessOrder_SellAboveMarketPrice_ReturnsRejected()
+    public async Task ProcessOrder_SellAboveMarketPrice_AddsToBook()
     {
         // Arrange
         var order = new OrderBuilder()
@@ -352,8 +352,8 @@ public class OrderHandlerTests
         var response = await _handler.ProcessOrderAsync(order);
 
         // Assert
-        response.Status.Should().Be(OrderStatus.Rejected);
-        response.Message.Should().Contain("above market price");
+        response.Status.Should().Be(OrderStatus.Pending);
+        response.Message.Should().Contain("added to book");
     }
 
     [Fact]
@@ -378,7 +378,7 @@ public class OrderHandlerTests
         // Assert
         response.Status.Should().Be(OrderStatus.Rejected);
         response.Message.Should().Contain("Insufficient cash");
-        response.Message.Should().Contain("1000");
+        response.Message.Should().Contain("1,000");
     }
 
     [Fact]

@@ -18,6 +18,16 @@ public class OrderValidator : IOrderValidator
 
     public (bool IsValid, string? ErrorMessage) Validate(OrderRequest order)
     {
+        if (order.Quantity <= 0)
+        {
+            return (false, "Quantity must be greater than 0");
+        }
+
+        if (order.OrderType == OrderType.Limit && order.Price <= 0)
+        {
+            return (false, "Price must be greater than 0");
+        }
+
         // Validate symbol
         if (string.IsNullOrWhiteSpace(order.Symbol))
         {
@@ -27,18 +37,6 @@ public class OrderValidator : IOrderValidator
         if (!_marketDataManager.IsValidSymbol(order.Symbol))
         {
             return (false, $"Invalid symbol: {order.Symbol}");
-        }
-
-        // Validate quantity
-        if (order.Quantity <= 0)
-        {
-            return (false, "Quantity must be greater than 0");
-        }
-
-        // Validate price - only required for limit orders
-        if (order.OrderType == OrderType.Limit && order.Price <= 0)
-        {
-            return (false, "Limit orders must have a price greater than 0");
         }
 
         return (true, null);

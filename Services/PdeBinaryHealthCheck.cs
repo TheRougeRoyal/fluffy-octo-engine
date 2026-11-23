@@ -13,11 +13,25 @@ public sealed class PdeBinaryHealthCheck : IHealthCheck
         _config = config.Value;
     }
 
+    /// <summary>
+    /// Returns the platform-appropriate path to the PDE binary.
+    /// On Windows, appends ".exe" if the path has no extension.
+    /// </summary>
+    private string ResolveBinaryPath()
+    {
+        var path = _config.PdeBinaryPath;
+        if (OperatingSystem.IsWindows() && string.IsNullOrEmpty(Path.GetExtension(path)))
+        {
+            path += ".exe";
+        }
+        return path;
+    }
+
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        var path = _config.PdeBinaryPath;
+        var path = ResolveBinaryPath();
         if (!File.Exists(path))
         {
             return Task.FromResult(
