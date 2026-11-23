@@ -181,7 +181,7 @@ export default function App() {
     if (!user || socket) return;
     setStatus('connecting');
     const configuredUrl = import.meta.env.VITE_WS_URL as string | undefined;
-    const wsUrl = configuredUrl ?? 'wss://fluffy-octo-engine-production.up.railway.app/ws';
+    const wsUrl = configuredUrl ?? 'ws://localhost:5000/ws';
     const nextSocket = new WebSocket(wsUrl);
     nextSocket.onopen = () => {
       setStatus('unauthenticated');

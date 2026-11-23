@@ -92,15 +92,8 @@ class Program
         // To create a new migration after model changes: dotnet ef migrations add <Name>
         using (var scope = app.Services.CreateScope())
         {
-            try
-            {
-                var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
-                await db.Database.MigrateAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogError(ex, "Database migrations failed during startup; health checks will report database status");
-            }
+            var db = scope.ServiceProvider.GetRequiredService<TradingDbContext>();
+            await db.Database.MigrateAsync();
         }
 
         app.UseWebSockets();
@@ -204,7 +197,7 @@ class Program
                 ignoreCase: true,
                 out var sslMode)
                 ? sslMode
-                : Npgsql.SslMode.Require
+                : Npgsql.SslMode.Disable
         };
 
         return builder.ConnectionString;

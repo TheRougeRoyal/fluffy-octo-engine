@@ -27,5 +27,5 @@ COPY --from=build /app/QuantCore/_build/default/bin/pricing_api.exe /app/QuantCo
 RUN chmod +x /app/QuantCore/bin/pricing_api
 
 # Railway provides the PORT env var
-EXPOSE 8080
+EXPOSE 5000
 ENTRYPOINT ["dotnet", "TradingEngine.dll"]

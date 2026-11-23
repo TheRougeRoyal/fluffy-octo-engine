@@ -43,7 +43,7 @@ public class WebSocketOrderHandler
             _firebaseAuthentication is null ? "disabled" : "enabled");
         if (_firebaseAuthentication is null)
         {
-            _logger.LogWarning("Firebase authentication service is unavailable; legacy API-key authentication is active.");
+            _logger.LogWarning("Firebase authentication service is unavailable; all WebSocket connections will be rejected.");
         }
     }
 
@@ -154,14 +154,8 @@ public class WebSocketOrderHandler
             }
         }
 
-        // Fallback: API key from config. If no key is configured, all connections are rejected.
-        if (string.IsNullOrWhiteSpace(_config.ApiKey))
-        {
-            _logger.LogWarning("No Firebase auth and no ApiKey configured — rejecting connection.");
-            return null;
-        }
-
-        return credential == _config.ApiKey ? "api-key-client" : null;
+        _logger.LogWarning("Firebase authentication is not configured — rejecting WebSocket connection.");
+        return null;
     }
 
     private async Task CloseAsync(WebSocket socket, WebSocketCloseStatus status, string description)

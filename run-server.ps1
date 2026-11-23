@@ -12,6 +12,16 @@ Write-Host "Starting Trading Engine Server" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
 
+if (-not $env:DATABASE_URL) {
+    $env:DATABASE_URL = "postgresql://postgres:password@localhost:5432/trading_engine"
+}
+if (-not $env:DATABASE_SSL_MODE) {
+    $env:DATABASE_SSL_MODE = "Disable"
+}
+if (-not $env:PORT) {
+    $env:PORT = "5000"
+}
+
 # Build the project
 Write-Host "Building project..." -ForegroundColor Yellow
 dotnet build TradingEngine.csproj

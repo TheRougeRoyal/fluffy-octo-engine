@@ -13,11 +13,11 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/ws': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:5000',
         ws: true,
       },
       '/health': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:5000',
       },
     },
   },

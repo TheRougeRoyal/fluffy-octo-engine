@@ -1,57 +1,30 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Start the full Trading Engine stack on Windows (PostgreSQL + Backend).
+    Start the complete Trading Engine stack on Windows with Docker Compose.
 .DESCRIPTION
-    Sets up environment variables and starts the backend server.
-
-    Prerequisites:
-      - PostgreSQL installed and accessible (e.g. via Scoop, winget, or the PostgreSQL MSI)
-      - .NET 8 SDK installed
-      - DATABASE_URL environment variable set, OR PostgreSQL running locally
-
-    Usage:
-      1. Set required environment variables (edit this script or set them in your shell):
-           $env:DATABASE_URL = "postgresql://postgres:password@localhost:5432/trading_engine"
-      2. Run:
-           .\start-all.ps1
+    Starts PostgreSQL, the OCaml pricing engine inside the backend container,
+    the .NET backend, and the React frontend.
 #>
 
 $ErrorActionPreference = "Stop"
-
-# ---------------------------------------------------------------------------
-# 1. Environment configuration
-# ---------------------------------------------------------------------------
-# If DATABASE_URL is not already set, default to a local PostgreSQL instance.
-if (-not $env:DATABASE_URL) {
-    $env:DATABASE_URL    = "postgresql://postgres@localhost:5432/trading_engine"
-}
-if (-not $env:DATABASE_SSL_MODE) {
-    $env:DATABASE_SSL_MODE = "Disable"
-}
-if (-not $env:PORT) {
-    $env:PORT = "5000"
-}
-
-# ---------------------------------------------------------------------------
-# 2. (Optional) Start PostgreSQL service if it is not already running.
-#    Adjust the service name to match your PostgreSQL installation.
-#    Common names: "postgresql-x64-16", "postgresql", "PostgreSQL"
-# ---------------------------------------------------------------------------
-$pgServiceName = "postgresql-x64-16"
-$pgService = Get-Service -Name $pgServiceName -ErrorAction SilentlyContinue
-if ($pgService -and $pgService.Status -ne "Running") {
-    Write-Host "Starting PostgreSQL service '$pgServiceName'..." -ForegroundColor Yellow
-    Start-Service -Name $pgServiceName
-    Start-Sleep -Seconds 2
-}
-
-# ---------------------------------------------------------------------------
-# 3. Start the backend
-# ---------------------------------------------------------------------------
-Write-Host "PostgreSQL configuration: $env:DATABASE_URL" -ForegroundColor Cyan
-Write-Host "Starting Backend on http://localhost:$env:PORT ..." -ForegroundColor Cyan
-Write-Host ""
-
 Set-Location $PSScriptRoot
-dotnet run --project TradingEngine.csproj
+
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    docker info *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Starting the complete Docker stack (PostgreSQL + OCaml + backend + frontend)..."
+        docker compose up --build -d
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker Compose failed to start the stack."
+        }
+        Write-Host ""
+        Write-Host "Frontend:  http://localhost:3000"
+        Write-Host "Backend:   http://localhost:5000"
+        Write-Host "Health:    http://localhost:5000/health"
+        Write-Host "PostgreSQL: localhost:5432"
+        exit 0
+    }
+}
+
+throw "Docker Desktop is not available. Install/start Docker Desktop and rerun this script."

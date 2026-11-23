@@ -1,5 +1,8 @@
 @echo off
 setlocal
+set "DATABASE_URL=postgresql://postgres:password@localhost:5432/trading_engine"
+set "DATABASE_SSL_MODE=Disable"
+set "PORT=5000"
 
 echo =========================================
 echo Starting Trading Engine Server
